@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TaskType {
+  WEBSITE_REGISTRATION
+  SUPER_ONE_REGISTRATION
+  SPONSOR_CONFIRMATION
+  COACH_BOT_COMPLETION
+  SUPPORT_GROUP_JOIN
+  FOOTBALL_ENGAGEMENT
+}
+
+enum TransactionType {
+  TASK_REWARD
+  REFERRAL_REWARD
+  WITHDRAWAL_RESERVE
+  WITHDRAWAL_REFUND
+  ADMIN_ADJUSTMENT
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model User {
+  id                String   @id @default(cuid())
+  telegramId        String   @unique
+  username          String?
+  firstName         String?
+  lastName          String?
+  referralCode      String   @unique
+  referredById      String?
+  referredBy        User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals         User[]   @relation("UserReferrals")
+  email             String?
+  phone             String?
+  superOneUsername  String?
+  superOneId        String?
+  sponsorName       String?
+  coachBotConfirmed Boolean  @default(false)
+  groupJoinedAt     DateTime?
+  engagementStartAt DateTime?
+  engagementDays    Int      @default(0)
+  engagementApproved Boolean @default(false)
+  suspended         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  submissions       TaskSubmission[]
+  wallet            Wallet?
+  transactions      WalletTransaction[]
+  withdrawals       Withdrawal[]
+  engagement        EngagementActivity[]
+}
+
+model Task {
+  id             String   @id @default(cuid())
+  type           TaskType @unique
+  title          String
+  description    String
+  rewardKobo     Int      @default(0)
+  active         Boolean  @default(true)
+  requiresReview Boolean  @default(true)
+  submissions    TaskSubmission[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TaskSubmission {
+  id             String             @id @default(cuid())
+  userId         String
+  taskId         String
+  details        Json?
+  status         VerificationStatus @default(PENDING)
+  reviewNote     String?
+  reviewedAt     DateTime?
+  rewardCredited Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  user           User               @relation(fields: [userId], references: [id])
+  task           Task               @relation(fields: [taskId], references: [id])
+  @@unique([userId, taskId])
+}
+
+model Wallet {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  availableKobo   Int      @default(0)
+  pendingKobo     Int      @default(0)
+  totalEarnedKobo Int      @default(0)
+  withdrawnKobo   Int      @default(0)
+  user            User     @relation(fields: [userId], references: [id])
+  updatedAt       DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id          String          @id @default(cuid())
+  userId      String
+  type        TransactionType
+  amountKobo  Int
+  description String
+  reference   String          @unique
+  createdAt   DateTime        @default(now())
+  user        User            @relation(fields: [userId], references: [id])
+}
+
+model EngagementActivity {
+  id          String   @id @default(cuid())
+  userId      String
+  activityDay String
+  messageCount Int     @default(0)
+  meaningfulCount Int  @default(0)
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+  @@unique([userId, activityDay])
+}
+
+model Withdrawal {
+  id                String           @id @default(cuid())
+  userId            String
+  amountKobo        Int
+  accountHolderName String
+  bankName          String
+  accountNumber     String
+  status            WithdrawalStatus @default(PENDING)
+  paymentReference  String?
+  adminNote          String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  user              User              @relation(fields: [userId], references: [id])
+}
+
+model CampaignSettings {
+  id                    String   @id @default("default")
+  referralRewardKobo    Int      @default(0)
+  minimumWithdrawalKobo Int      @default(100000)
+  engagementDays        Int      @default(30)
+  dataBonusEnabled      Boolean  @default(false)
+  dataBonusDescription  String   @default("5GB mobile data")
+  supportGroupInviteUrl String?
+  superOneDownloadUrl   String?
+  updatedAt             DateTime @updatedAt
+}
+
+model AdminActionLog {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+}
