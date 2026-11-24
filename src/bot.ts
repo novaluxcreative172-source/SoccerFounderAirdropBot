@@ -141,14 +141,18 @@ bot.on("text",async(ctx:any,next:any)=>{
  const answer=ctx.message.text.trim();
  if(answer.startsWith("/"))return next();
  if(draft.step==="amount"){
-  const amount=Number(answer.replace(/,/g,""));
-  if(!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(Math.round(amount*100))||Math.abs(amount*100-Math.round(amount*100))>0.001)return ctx.reply("Please enter a valid amount in naira, for example 2500.");
-  if(amount<config.MIN_WITHDRAWAL_NGN)return ctx.reply("The minimum withdrawal is "+fmt(config.MIN_WITHDRAWAL_NGN*100)+". Please enter another amount.");
-  const user=await prisma.user.findUnique({where:{telegramId:key},include:{wallet:true}});
+  // Validate the requested amount and available wallet balance BEFORE asking for any bank details.
+  const normalized=answer.replace(/[₦,\\s]/g,"");
+  if(!/^\\d+(?:\\.\\d{1,2})?$/.test(normalized))return ctx.reply("❌ Invalid amount. Enter a valid naira amount, for example 2500. No withdrawal has been started.");
+  const amount=Number(normalized);
+  if(!Number.isFinite(amount)||amount<=0)return ctx.reply("❌ The withdrawal amount must be greater than zero. Please enter a valid amount.");
+  if(amount<config.MIN_WITHDRAWAL_NGN)return ctx.reply("❌ Minimum withdrawal is "+fmt(config.MIN_WITHDRAWAL_NGN*100)+". You entered "+fmt(Math.round(amount*100))+". Please enter at least the minimum amount.");
   const amountKobo=Math.round(amount*100);
-  if(!user?.wallet||user.wallet.availableKobo<amountKobo)return ctx.reply("Your available balance is insufficient. Available: "+fmt(user?.wallet?.availableKobo||0)+". Enter a lower amount or /cancel.");
+  const user=await prisma.user.findUnique({where:{telegramId:key},include:{wallet:true}});
+  const available=user?.wallet?.availableKobo||0;
+  if(!user?.wallet||available<amountKobo)return ctx.reply("❌ Insufficient available balance.\nRequested: "+fmt(amountKobo)+"\nAvailable: "+fmt(available)+"\n\nYou cannot continue until your available balance covers the full requested amount. Enter a lower amount or send /cancel. Your bank details have not been requested and no funds have been deducted.");
   draft.amountKobo=amountKobo;draft.step="name";
-  return ctx.reply("Please enter the full name of the bank account holder.");
+  return ctx.reply("✅ Amount accepted: "+fmt(amountKobo)+".\n\nPlease enter the full name of the bank account holder.");
  }
  if(draft.step==="name"){
   if(answer.length<3||answer.length>100)return ctx.reply("Please enter a valid account holder name (3–100 characters).");
