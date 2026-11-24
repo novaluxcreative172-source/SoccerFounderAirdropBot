@@ -8,6 +8,7 @@ import path from "node:path";
 import {bot} from "./bot";
 import {config} from "./config";
 import {prisma} from "./db";
+import {reviewSubmission} from "./services/review";
 const app=express();
 app.disable("x-powered-by"); app.use(helmet({contentSecurityPolicy:false})); app.use(compression()); app.use(express.json({limit:"32kb"}));
 app.use("/api",rateLimit({windowMs:60000,limit:90}));
@@ -20,6 +21,42 @@ function requireAdmin(req:Request,res:Response,next:NextFunction){
 }
 app.get("/admin",(_req,res)=>res.sendFile(path.resolve(process.cwd(),"public/admin.html")));
 app.post("/api/admin/login",(req,res)=>{const key=String(req.body?.key||"");if(!config.ADMIN_SESSION_SECRET||!safeEqual(key,config.ADMIN_SESSION_SECRET)){res.status(401).json({error:"Invalid admin key"});return;}res.json({ok:true,token:config.ADMIN_SESSION_SECRET});});
+app.get("/api/admin/submissions",requireAdmin,async(req,res)=>{
+ const status=String(req.query.status||"PENDING");
+ if(!["PENDING","APPROVED","REJECTED"].includes(status))return res.status(400).json({error:"Invalid status"});
+ const rows=await prisma.taskSubmission.findMany({
+  where:{status:status as any},
+  include:{task:true,user:{select:{id:true,telegramId:true,username:true,firstName:true,lastName:true}}},
+  orderBy:{createdAt:"asc"},take:300
+ });
+ res.json(rows);
+});
+app.post("/api/admin/submissions/:id/review",requireAdmin,async(req,res)=>{
+ const id=String(req.params.id);
+ const approved=req.body?.approved===true;
+ const note=String(req.body?.note||"").trim().slice(0,500);
+ try{
+  const before=await prisma.taskSubmission.findUnique({where:{id},include:{user:{include:{referredBy:true}},task:true}});
+  if(!before)return res.status(404).json({error:"Submission not found"});
+  const wasReferralRewardCredited=before.user.referralRewardCredited;
+  const result=await reviewSubmission(id,approved,note,"dashboard-admin");
+  try{
+   await bot.telegram.sendMessage(Number(before.user.telegramId),
+    (approved?"✅ Your task was approved.":"❌ Your task was not approved.")+"\nTask: "+before.task.title+
+    (approved?"\nReward credited: ₦"+(before.task.rewardKobo/100).toLocaleString("en-NG"):"\nAdmin note: "+(note||"Please review the task instructions and submit again.")));
+  }catch(e){console.error("Task review notification failed",e);}
+  const after=await prisma.user.findUnique({where:{id:before.userId},select:{referralRewardCredited:true}});
+  if(!wasReferralRewardCredited&&after?.referralRewardCredited&&before.user.referredBy){
+   try{await bot.telegram.sendMessage(Number(before.user.referredBy.telegramId),"🎉 Your referral has completed and received approval for all six SoccerFounder campaign tasks. Your ₦100 referral reward has been credited.");}
+   catch(e){console.error("Referral reward notification failed",e);}
+  }
+  res.json({ok:true,submission:result});
+ }catch(e:any){
+  const message=String(e?.message||"");
+  const status=message.includes("already reviewed")?409:500;
+  res.status(status).json({error:status===409?"This submission has already been reviewed.":"Could not review submission."});
+ }
+});
 app.get("/api/admin/withdrawals",requireAdmin,async(_req,res)=>{
  const rows=await prisma.withdrawal.findMany({include:{user:{select:{telegramId:true,username:true,firstName:true,lastName:true}}},orderBy:{createdAt:"desc"},take:250});
  res.json(rows.map(w=>({...w,amountNaira:w.amountKobo/100,accountNumber:w.accountNumber})));
