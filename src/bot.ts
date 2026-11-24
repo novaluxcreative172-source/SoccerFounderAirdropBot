@@ -233,7 +233,7 @@ bot.action("referral",async ctx=>{
   return {ref,approved:approved.size,pending,complete:TASK_FLOW.every(task=>approved.has(task.type))};
  });
  const completed=taskProgress.filter(row=>row.complete).length;
- const active=taskProgress.filter(row=>row.approved>0&&!row.complete).length;
+ const active=taskProgress.filter(row=>row.ref.submissions.length>0&&!row.complete).length;
  const pendingReviews=taskProgress.reduce((sum,row)=>sum+row.pending,0);
  const rewardEarned=rewardTransactions.reduce((sum,row)=>sum+row.amountKobo,0);
  const lines=taskProgress.slice(0,15).map((row,index)=>{
