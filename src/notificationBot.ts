@@ -104,7 +104,7 @@ export function registerAdminWithdrawalHandler(handler: AdminWithdrawalHandler):
       const result = await handler(withdrawalId, adminId);
       await ctx.answerCbQuery("Payment marked as paid.");
       const oldText = ctx.callbackQuery.message && "text" in ctx.callbackQuery.message ? ctx.callbackQuery.message.text || "" : "";
-      await ctx.editMessageText(oldText + "\\n\\n✅ PAYMENT CONFIRMED\\n" + result, { reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageText(oldText + "\n\n✅ PAYMENT CONFIRMED\n" + result, { reply_markup: { inline_keyboard: [] } });
     } catch (error: any) {
       const message = String(error?.message || "");
       await ctx.answerCbQuery(message.includes("already paid") ? "This withdrawal is already marked paid." : "Payment confirmation failed. Check the admin dashboard.", { show_alert: true });
@@ -117,7 +117,7 @@ export async function notifyAdminWithdrawal(message: string, withdrawalId: strin
     console.error("[WITHDRAWAL] Admin notification bot token is not configured.");
     return false;
   }
-  const validAdminIds = adminIds.filter(id => /^\\d+$/.test(id));
+  const validAdminIds = adminIds.filter(id => /^\d+$/.test(id));
   if (!validAdminIds.length) {
     console.error("[WITHDRAWAL] No valid numeric ADMIN_IDS configured.");
     return false;
