@@ -119,7 +119,10 @@ bot.on("photo",async ctx=>{
     const savedPhotoUrl=await ctx.telegram.getFileLink(savedPhotoId);
     const delivered=await notifyAdminPhoto(savedPhotoUrl.href,"📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
     if(delivered)return ctx.reply("📸 YOUR SAVED SCREENSHOT WAS FORWARDED\n\n• Task: "+(current+1)+"/6 — "+currentTask!.title+"\n• Status: ⏳ Under review\n\nThe admin team has now received the screenshot. Please wait for a decision.");
-    return ctx.reply("⚠️ SCREENSHOT STILL NOT DELIVERED\n\n• Task: "+(current+1)+"/6 — "+currentTask!.title+"\n• Status: Saved, awaiting admin notification\n\nThe bot tried again but could not deliver the screenshot. Please contact support. Your evidence has not been lost.");
+    // The participant was already informed when the original submission was saved.
+    // Do not send another failure message on every photo/retry attempt.
+    console.warn("[SCREENSHOT] Retry still not delivered; keeping saved evidence and suppressing duplicate participant alert. Submission:", currentSubmission.id);
+    return;
    }catch(error){console.error("Retry of pending task screenshot failed:",error);return ctx.reply("⚠️ Your screenshot is saved, but the admin notification could not be delivered. Please contact support.");}
   }
   n=current+1;
