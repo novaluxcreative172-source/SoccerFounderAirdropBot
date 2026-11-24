@@ -56,47 +56,43 @@ export function registerAdminReviewHandler(handler: AdminReviewHandler): void {
 }
 
 export async function notifyAdminPhoto(photoUrl: string, caption: string, submissionId: string): Promise<boolean> {
+  console.log("[SCREENSHOT] Forwarding started. Submission:", submissionId,
+    "Notification bot ready:", Boolean(adminNotificationBot),
+    "Admin recipients:", adminIds.length);
+
   if (!adminNotificationBot) {
-    console.error("Screenshot delivery failed: ADMIN_NOTIFICATION_BOT_TOKEN is not configured.");
+    console.error("[SCREENSHOT] FAILED: ADMIN_NOTIFICATION_BOT_TOKEN is not configured.");
     return false;
   }
-  if (adminIds.length === 0) {
-    console.error("Screenshot delivery failed: ADMIN_IDS is empty.");
+  const validAdminIds = adminIds.filter(id => /^\d+$/.test(id));
+  if (validAdminIds.length === 0) {
+    console.error("[SCREENSHOT] FAILED: no valid numeric ADMIN_IDS configured. Entries:", adminIds.length);
     return false;
   }
 
   let delivered = 0;
-  try {
-    const response = await fetch(photoUrl);
-    if (!response.ok) throw new Error("Main bot Telegram file download failed with HTTP " + response.status);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length === 0) throw new Error("Downloaded screenshot is empty.");
-
-    for (const adminId of adminIds) {
-      if (!/^\d+$/.test(adminId)) {
-        console.error("Screenshot delivery skipped: invalid ADMIN_IDS entry:", adminId);
-        continue;
-      }
-      try {
-        await adminNotificationBot.telegram.sendPhoto(
-          Number(adminId),
-          Input.fromBuffer(bytes, "task-evidence.jpg"),
-          {
-            caption,
-            ...Markup.inlineKeyboard([
-              [Markup.button.callback("✅ Approve task", "review_approve_" + submissionId)],
-              [Markup.button.callback("❌ Reject task", "review_reject_" + submissionId)]
-            ])
-          }
-        );
-        delivered++;
-        console.log("Task screenshot successfully delivered to admin Telegram ID", adminId, "for submission", submissionId);
-      } catch (error: any) {
-        console.error("Task screenshot delivery failed for admin Telegram ID", adminId, "submission", submissionId, "Telegram error:", error?.response?.description || error?.description || error?.message || error);
-      }
+  for (const adminId of validAdminIds) {
+    try {
+      console.log("[SCREENSHOT] Sending Telegram-hosted image URL to admin", adminId, "submission", submissionId);
+      // Telegram fetches the main bot's file URL directly; file_id values are bot-specific.
+      await adminNotificationBot.telegram.sendPhoto(
+        Number(adminId),
+        photoUrl,
+        {
+          caption,
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("✅ Approve task", "review_approve_" + submissionId)],
+            [Markup.button.callback("❌ Reject task", "review_reject_" + submissionId)]
+          ])
+        }
+      );
+      delivered++;
+      console.log("[SCREENSHOT] SUCCESS: delivered to admin", adminId, "submission", submissionId);
+    } catch (error: any) {
+      console.error("[SCREENSHOT] SEND FAILED: admin", adminId, "submission", submissionId,
+        "Telegram error:", error?.response?.description || error?.description || error?.message || String(error));
     }
-  } catch (error: any) {
-    console.error("Task screenshot could not be downloaded or forwarded. Submission:", submissionId, "Error:", error?.response?.description || error?.description || error?.message || error);
   }
+  console.log("[SCREENSHOT] Forwarding finished. Submission:", submissionId, "Delivered:", delivered, "of", validAdminIds.length);
   return delivered > 0;
 }
