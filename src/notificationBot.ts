@@ -82,18 +82,30 @@ export async function notifyAdminPhoto(photoUrl: string, caption: string, submis
       throw new Error("Main bot file download returned HTTP " + response.status);
     }
     const contentType = response.headers.get("content-type") || "";
-    if (!contentType.toLowerCase().startsWith("image/")) {
-      throw new Error("Downloaded file is not an image. Content-Type: " + contentType);
-    }
     const arrayBuffer = await response.arrayBuffer();
     imageBuffer = Buffer.from(arrayBuffer);
     if (imageBuffer.length === 0) throw new Error("Downloaded screenshot is empty.");
     if (imageBuffer.length > 20 * 1024 * 1024) {
       throw new Error("Screenshot exceeds Telegram's 20 MB bot upload limit.");
     }
-    const extension = contentType.toLowerCase().includes("png") ? "png"
-      : contentType.toLowerCase().includes("webp") ? "webp"
-      : contentType.toLowerCase().includes("gif") ? "gif" : "jpg";
+
+    // Telegram's file server can label valid photo bytes as application/octet-stream.
+    // Verify the actual file signature instead of trusting the HTTP Content-Type.
+    const isPng = imageBuffer.length >= 8 &&
+      imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const isJpeg = imageBuffer.length >= 3 &&
+      imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff;
+    const isGif = imageBuffer.length >= 6 &&
+      (imageBuffer.toString("ascii", 0, 6) === "GIF87a" || imageBuffer.toString("ascii", 0, 6) === "GIF89a");
+    const isWebp = imageBuffer.length >= 12 &&
+      imageBuffer.toString("ascii", 0, 4) === "RIFF" &&
+      imageBuffer.toString("ascii", 8, 12) === "WEBP";
+
+    if (!isPng && !isJpeg && !isGif && !isWebp) {
+      throw new Error("Downloaded bytes do not have a recognized image signature. Content-Type: " +
+        contentType + "; first bytes: " + imageBuffer.subarray(0, 12).toString("hex"));
+    }
+    const extension = isPng ? "png" : isGif ? "gif" : isWebp ? "webp" : "jpg";
     filename = "task-evidence." + extension;
     console.log("[SCREENSHOT] Image downloaded successfully. Submission:", submissionId,
       "Bytes:", imageBuffer.length, "Content-Type:", contentType);
