@@ -15,12 +15,12 @@ async function userFor(ctx:any){
  return user;
 }
 const TASK_FLOW=[
- {type:"WEBSITE_REGISTRATION",title:"Register on the SoccerFounder Website",description:"1. Visit "+config.WEBSITE_URL+". 2. Register on the website. 3. Download the SoccerFounder app from the website and complete the registration in the app. 4. Take a screenshot showing that your registration is complete, then send the screenshot here. Your evidence for this task must be a screenshot of your completed registration. Do not type your name, email or phone number in the chat.",rewardKobo:30000},
- {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Take a clear screenshot showing your completed registration or Super One ID in the app, then upload that screenshot here. Do not send your password, OTP or other login security details.",rewardKobo:20000},
- {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"Your sponsor/team leader must be Shane. Take a screenshot showing Shane as your sponsor/team leader in the relevant account screen, then upload it here. Hide unrelated personal information where possible.",rewardKobo:10000},
- {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"Open @"+config.COACH_BOT_USERNAME+" and complete all six onboarding steps. Take a screenshot showing the completed steps or completion confirmation, then upload it here.",rewardKobo:10000},
- {type:"SUPPORT_GROUP_JOIN",title:"Join the Support Group",description:"Join the SoccerFounder Support Group: "+(config.SUPPORT_GROUP_INVITE_URL||"use the campaign support group invite")+". Take a screenshot showing that you have joined the group, then upload it here.",rewardKobo:10000},
- {type:"FOOTBALL_ENGAGEMENT",title:"30-Day Football Engagement",description:"Complete 30 days of genuine football engagement. When the 30 days are complete, upload screenshots showing your participation across the period. The admin will review the evidence.",rewardKobo:30000}
+ {type:"WEBSITE_REGISTRATION",title:"Website & App Registration",description:"1. Visit "+config.WEBSITE_URL+".\n2. Register on the website.\n3. Download the SoccerFounder app.\n4. Complete registration in the app.\n5. Upload a screenshot of your completed registration.\n\n⚠️ Screenshot evidence only. Do not type your name, email or phone number here.",rewardKobo:30000},
+ {type:"SUPER_ONE_REGISTRATION",title:"SuperOne Registration",description:"1. Complete your SuperOne registration.\n2. Take a screenshot showing successful registration or your SuperOne ID.\n3. Upload the screenshot here.\n\n⚠️ Never share your password or OTP.",rewardKobo:20000},
+ {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"1. Confirm that your sponsor/team leader is Shane.\n2. Take a screenshot showing Shane as your sponsor.\n3. Upload the screenshot here.\n\nProtect unrelated personal information.",rewardKobo:10000},
+ {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"1. Open @"+config.COACH_BOT_USERNAME+".\n2. Complete all six steps.\n3. Take a screenshot of the completion confirmation.\n4. Upload it here.",rewardKobo:10000},
+ {type:"SUPPORT_GROUP_JOIN",title:"Join the Support Group",description:"1. Join the SoccerFounder Support Group: "+(config.SUPPORT_GROUP_INVITE_URL||"use the campaign support group invite")+".\n2. Take a screenshot showing you have joined.\n3. Upload the screenshot here.",rewardKobo:10000},
+ {type:"FOOTBALL_ENGAGEMENT",title:"30-Day Football Engagement",description:"1. Participate in genuine football discussions for 30 days.\n2. Keep screenshots showing your participation.\n3. Upload your evidence after the 30 days are complete.",rewardKobo:30000}
 ] as const;
 const taskEvidenceDrafts=new Map<string,number>();
 async function showCurrentTask(ctx:any){
@@ -40,13 +40,13 @@ async function showCurrentTask(ctx:any){
  if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
  const previous=submissions.find(s=>s.taskId===task.id);
  const previousDetails=previous?.details as {photoFileId?:string}|null;
- if(previous?.status==="PENDING"&&previousDetails?.photoFileId)return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: UNDER REVIEW — YOUR screenshot is with the admin team.\\n\\nPlease wait for the admin decision.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","task_status")]]));
+ if(previous?.status==="PENDING"&&previousDetails?.photoFileId)return ctx.reply("📝 TASK "+(next+1)+" OF 6\n\n"+item.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n\n📌 HOW TO COMPLETE\n"+item.description+"\n\n⏳ STATUS: UNDER REVIEW\nYour screenshot is awaiting admin approval.\n\nPlease wait for the decision.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check status","task_status")]]));
  const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. "+(previous.reviewNote||"Please review the instructions and submit new evidence."):"";
- return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence. The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
+ return ctx.reply("📝 TASK "+(next+1)+" OF 6\n\n"+item.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n\n📌 HOW TO COMPLETE\n"+item.description+note+"\n\n📸 When finished, tap DONE and upload your screenshot.\n🔒 The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
 bot.start(async ctx=>{
  await userFor(ctx);
- await ctx.reply("⚽ Welcome to SoccerFounder Airdrop & Rewards!\n\nComplete all six campaign tasks and submit screenshot evidence for admin review. Earn up to ₦1,100 in approved task rewards, plus ₦100 for each eligible referral who completes all six tasks and receives approval. Sponsor/team leader must be Shane. Rewards are subject to verification; no income is guaranteed.",Markup.inlineKeyboard([
+ await ctx.reply("⚽ WELCOME TO SOCCERFOUNDER!\n\n📋 Complete 6 tasks and submit screenshot evidence.\n💰 Earn up to ₦1,100 in approved task rewards.\n👥 Earn ₦100 for each eligible referral who completes all 6 tasks.\n\n📌 Sponsor/team leader must be Shane. All rewards require admin verification.",Markup.inlineKeyboard([
   [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
   [Markup.button.callback("👥 Invite friends","referral")]
  ]));
@@ -81,9 +81,9 @@ bot.action("task_status",async ctx=>{
   return TASK_FLOW.every(task=>types.has(task.type));
  }).length;
  const referralEarned=referralTransactions.reduce((sum,row)=>sum+row.amountKobo,0);
- const withdrawalLines=withdrawals.length?withdrawals.map(w=>"• "+fmt(w.amountKobo)+" — "+w.status+(w.adminNote?" ("+w.adminNote+")":"")).join("\\n"):"No withdrawal requests yet.";
+ const withdrawalLines=withdrawals.length?withdrawals.map(w=>"• "+fmt(w.amountKobo)+" — "+w.status+(w.adminNote?" ("+w.adminNote+")":"")).join("\n"):"No withdrawal requests yet.";
  const wallet=user.wallet;
- const report="📊 YOUR SOCCERFOUNDER ACCOUNT STATUS\\n\\nTASK PROGRESS ("+completed+"/6 completed)\\n"+taskLines.join("\\n")+"\\n\\nTask rewards earned: "+fmt(approvedTaskValue)+"\\nTask rewards awaiting review: "+fmt(pendingTaskValue)+" ("+pending+" submission"+(pending===1?"":"s")+")\\n\\nREFERRALS\\nPeople invited: "+referrals.length+"\\nReferrals who completed all six approved tasks: "+fullyCompletedReferrals+"\\nReferral rewards credited: "+fmt(referralEarned)+"\\nReferral reward: ₦100 per eligible completed referral\\n\\nWALLET\\nAvailable: "+fmt(wallet?.availableKobo||0)+"\\nPending withdrawal: "+fmt(wallet?.pendingKobo||0)+"\\nTotal earned: "+fmt(wallet?.totalEarnedKobo||0)+"\\nWithdrawn: "+fmt(wallet?.withdrawnKobo||0)+"\\nMinimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\\n\\nWITHDRAWAL HISTORY\\n"+withdrawalLines+"\\n\\nThis report reflects the records currently saved in your account.";
+ const report="📊 YOUR SOCCERFOUNDER DASHBOARD\n\n📋 TASK PROGRESS\n• Completed: "+completed+"/6\n• Under review: "+pending+"\n• Not submitted: "+(6-completed-pending-taskLines.filter(line=>line.includes(" — REJECTED")).length)+"\n\n📝 YOUR TASKS\n"+taskLines.join("\n")+"\n\n💰 TASK REWARDS\n• Approved: "+fmt(approvedTaskValue)+"\n• Awaiting review: "+fmt(pendingTaskValue)+"\n\n👥 REFERRALS\n• People invited: "+referrals.length+"\n• Fully completed: "+fullyCompletedReferrals+"\n• Reward per completed referral: ₦100\n• Rewards credited: "+fmt(referralEarned)+"\n\n👛 WALLET\n• Available: "+fmt(wallet?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(wallet?.pendingKobo||0)+"\n• Total earned: "+fmt(wallet?.totalEarnedKobo||0)+"\n• Withdrawn: "+fmt(wallet?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\n💳 WITHDRAWAL HISTORY\n"+withdrawalLines+"\n\nℹ️ Figures reflect your saved account records.";
  return ctx.reply(report,Markup.inlineKeyboard([[Markup.button.callback("🔄 Refresh status","task_status")],[Markup.button.callback("📝 Open my tasks","tasks")],[Markup.button.callback("💰 My wallet","wallet")]]));
 });
 for(let n=1;n<=6;n++){
@@ -98,7 +98,7 @@ for(let n=1;n<=6;n++){
   const currentSubmission=currentTask?subs.find(x=>x.taskId===currentTask.id):null;
   if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId))return ctx.reply("Your screenshot is already awaiting admin review. Please wait for approval before continuing.");
   taskEvidenceDrafts.set(String(ctx.from.id),n);
-  return ctx.reply("📸 Please upload a screenshot proving that you completed Task "+n+". Screenshots are required for review. You may add a short caption, but do not send passwords, OTPs or login details. Send /cancel to stop.");
+  return ctx.reply("📸 SUBMIT TASK "+n+"\n\nPlease upload a screenshot showing that you completed this task.\n\n⚠️ Screenshot required. Never send passwords, OTPs or login details.\n\nSend /cancel to stop.");
  });
 }
 bot.on("photo",async ctx=>{
@@ -122,11 +122,11 @@ bot.on("photo",async ctx=>{
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
  const photoUrl=await ctx.telegram.getFileLink(photo.file_id);
- const delivered=await notifyAdminPhoto(photoUrl.href,"📥 NEW TASK EVIDENCE\\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\\nTelegram ID: "+u.telegramId+"\\nTask "+n+": "+task.title+"\\nReward on approval: "+fmt(task.rewardKobo)+"\\nSubmission ID: "+submission.id+"\\n"+(caption?"Details: "+caption:"No caption provided."),submission.id);
+ const delivered=await notifyAdminPhoto(photoUrl.href,"📩 NEW TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+n+"/6 — "+task.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n🔖 Submission: "+submission.id+"\n\n"+(caption?"Caption: "+caption:"No caption."),submission.id);
  if(delivered){
-  await ctx.reply("✅ Your screenshot for Task "+n+" has been saved and successfully forwarded to the admin team.\\n\\n⏳ Status: UNDER REVIEW.\\nPlease wait for the admin decision. The next task unlocks only after approval.");
+  await ctx.reply("📸 SUBMISSION RECEIVED\n\n• Task: "+n+"/6 — "+task.title+"\n• Reward: "+fmt(task.rewardKobo)+"\n• Status: ⏳ Under review\n\nYour screenshot was delivered to the admin team. Please wait for approval.");
  }else{
-  await ctx.reply("⚠️ Your screenshot for Task "+n+" has been saved in your account, but the admin notification could not be delivered. It is NOT confirmed as under review yet. Please contact campaign support; do not submit the same screenshot again.");
+  await ctx.reply("⚠️ SCREENSHOT SAVED — ADMIN ALERT FAILED\n\n• Task: "+n+"/6 — "+task.title+"\n• Status: Not yet under review\n\nYour screenshot is saved, but the admin bot did not receive the alert. Please contact support. Do not submit it again.");
  }
 
 });
@@ -134,7 +134,7 @@ bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaig
 bot.action("wallet",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
- const w=u.wallet; await ctx.reply("YOUR REWARDS WALLET\nAvailable: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum withdrawal: ₦"+config.MIN_WITHDRAWAL_NGN.toLocaleString("en-NG")+"\n\nTo withdraw, tap Request withdrawal or send /withdraw. I will ask for your details one question at a time.");
+ const w=u.wallet; await ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Total withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nTap Request withdrawal or send /withdraw to begin.");
 });
 type WithdrawalDraft = { step: "amount" | "name" | "bank" | "account" | "confirm"; amountKobo?: number; accountName?: string; bankName?: string; accountNumber?: string };
 const withdrawalDrafts = new Map<string, WithdrawalDraft>();
@@ -144,7 +144,7 @@ async function askWithdrawalAmount(ctx:any) {
  if(!user)return ctx.reply("Please use /start first.");
  if(!user.wallet)return ctx.reply("Your wallet is not ready yet. Please try again later.");
  withdrawalDrafts.set(String(ctx.from.id),{step:"amount"});
- return ctx.reply("🏦 WITHDRAWAL REQUEST\n\nHow much would you like to withdraw in naira?\nMinimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nAvailable balance: "+fmt(user.wallet.availableKobo)+"\n\nEnter the amount, for example: 2500\nSend /cancel to stop.");
+ return ctx.reply("🏦 WITHDRAWAL REQUEST\n\n• Minimum: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n• Available: "+fmt(user.wallet.availableKobo)+"\n\nEnter the amount in naira (example: 2500).\nSend /cancel to stop.");
 }
 bot.action("withdraw_help",async ctx=>{await ctx.answerCbQuery();await askWithdrawalAmount(ctx);});
 bot.command("withdraw",async ctx=>askWithdrawalAmount(ctx));
@@ -247,7 +247,7 @@ bot.action("referral",async ctx=>{
   return (index+1)+". "+name+username+"\n   Tasks approved: "+row.approved+"/6"+(row.pending?" | Under review: "+row.pending:"")+"\n   "+state;
  });
  const link="https://t.me/"+config.BOT_USERNAME+"?start="+u.referralCode;
- const report="👥 YOUR REFERRAL DASHBOARD\n\n🔗 Your personal invite link:\n"+link+"\n\n📊 REFERRAL SUMMARY\n• People invited: "+referrals.length+"\n• Started/completed at least one task: "+active+"\n• Tasks awaiting admin review: "+pendingReviews+"\n• Fully completed referrals: "+completed+"\n• Referral rewards earned: "+fmt(rewardEarned)+"\n• Reward per eligible referral: ₦100\n\n📋 REFERRAL ACTIVITY\n"+(lines.length?lines.join("\n\n"):"No referrals yet. Share your personal link to invite participants.")+(referrals.length>15?"\n\nShowing the first 15 referrals. Your totals include everyone.":"")+"\n\n🎁 You earn ₦100 when a person you invited gets all six tasks approved. Task submissions are counted only after admin approval. Referral rewards are credited once per eligible participant. Self-referrals and duplicate referrals do not qualify.";
+ const report="👥 REFERRAL DASHBOARD\n\n🔗 YOUR INVITE LINK\n"+link+"\n\n📊 SUMMARY\n• Invited: "+referrals.length+"\n• In progress: "+active+"\n• Awaiting task review: "+pendingReviews+"\n• Completed all 6 tasks: "+completed+"\n• Rewards credited: "+fmt(rewardEarned)+"\n• Reward per eligible referral: ₦100\n\n📋 RECENT REFERRALS\n"+(lines.length?lines.join("\n\n"):"No referrals yet. Share your link to invite participants.")+(referrals.length>15?"\n\nShowing 15 recent referrals. Totals include everyone.":"")+"\n\n🎁 ₦100 is credited once when a referral gets all 6 tasks approved. Pending or rejected tasks do not count.";
  return ctx.reply(report,Markup.inlineKeyboard([
   [Markup.button.url("🔗 Share invite link",link)],
   [Markup.button.callback("🔄 Refresh referral dashboard","referral")],
@@ -258,7 +258,7 @@ bot.command("tasks",ctx=>ctx.reply("Tap My tasks from /start."));
 bot.command("wallet",async ctx=>{
  const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
- const w=u.wallet;return ctx.reply("Available: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nSend /withdraw to start a guided withdrawal, one question at a time.");
+ const w=u.wallet;return ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nSend /withdraw to request a payout.");
 });
 bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the SoccerFounder Support Group using the invite link provided in the campaign."));
 registerAdminReviewHandler(async (submissionId, approved, adminId) => {
@@ -266,8 +266,8 @@ registerAdminReviewHandler(async (submissionId, approved, adminId) => {
  if(!existing)throw new Error("Submission not found");
  await reviewSubmission(submissionId,approved,approved?"Approved from admin notification bot":"Please review the task instructions and submit new screenshot evidence.",adminId);
  const message=approved
-  ? "✅ Your task was approved.\nTask: "+existing.task.title+"\nReward credited: "+fmt(existing.task.rewardKobo)+"\n\nOpen My tasks or press Check task status to see your completed task and continue."
-  : "❌ Your task was not approved.\nTask: "+existing.task.title+"\nPlease review the task instructions and submit a new screenshot.";
+  ? "✅ TASK APPROVED\n\n• Task: "+existing.task.title+"\n• Reward credited: "+fmt(existing.task.rewardKobo)+"\n\nYour next task is now unlocked. Tap My tasks to continue."
+  : "❌ TASK NOT APPROVED\n\n• Task: "+existing.task.title+"\n\nPlease review the instructions and submit a new screenshot.";
  try { await bot.telegram.sendMessage(Number(existing.user.telegramId),message); } catch (error) { console.error("Participant task review notification failed:",error); }
  if(approved&&existing.user.referredById){
   try{
@@ -280,7 +280,7 @@ registerAdminReviewHandler(async (submissionId, approved, adminId) => {
     const progress=TASK_FLOW.filter(task=>approvedTypes.has(task.type)).length;
     const completedReferral=TASK_FLOW.every(task=>approvedTypes.has(task.type));
     const bonusCredited=referred.referralRewardCredited;
-    const referralMessage="🎉 YOUR REFERRAL MADE PROGRESS!\n\n"+(existing.user.firstName||"A participant you invited")+" has received admin approval for a task.\n\n✅ Approved task: "+existing.task.title+"\n📊 Referral progress: "+progress+"/6 tasks approved"+(completedReferral?"\n\n🏆 ALL SIX TASKS COMPLETED! Your ₦100 referral reward "+(bonusCredited?"has been credited to your wallet.":"is being processed."):"\n\nYou will earn ₦100 when all six tasks have been approved.\n\nOpen Invite friends to view your updated referral dashboard.");
+    const referralMessage="🎉 REFERRAL UPDATE\n\n• Participant: "+(existing.user.firstName||"A participant you invited")+"\n• Approved task: "+existing.task.title+"\n• Progress: "+progress+"/6 tasks\n\n"+(completedReferral?"🏆 All 6 tasks approved! "+(bonusCredited?"Your ₦100 reward has been credited.":"Your ₦100 reward is being processed."):"You earn ₦100 when all 6 tasks are approved.\n\nOpen Invite friends to view progress.");
     await bot.telegram.sendMessage(Number(referrer.telegramId),referralMessage);
    }
   }catch(error){console.error("Referrer task progress notification failed:",error);}
