@@ -21,9 +21,9 @@ async function main(){
  }
  await prisma.campaignSettings.upsert({
   where:{id:"default"},
-  create:{id:"default",referralRewardKobo:10000,engagementDays:30,minimumWithdrawalKobo:130000},
-  update:{referralRewardKobo:10000,engagementDays:30,minimumWithdrawalKobo:130000}
+  create:{id:"default",referralRewardKobo:10000,engagementDays:30,minimumWithdrawalKobo:100000},
+  update:{referralRewardKobo:10000,engagementDays:30,minimumWithdrawalKobo:100000}
  });
- console.log("Six tasks configured: ₦300, ₦200, ₦100, ₦100, ₦100, ₦300; total ₦1,100. Minimum withdrawal ₦1,300; referral reward ₦100 after all six tasks are approved.");
+ console.log("Six tasks configured: ₦300, ₦200, ₦100, ₦100, ₦100, ₦300; total ₦1,100. Minimum withdrawal ₦1,000; referral reward ₦100 after all six tasks are approved.");
 }
 main().finally(()=>prisma.$disconnect());
