@@ -59,7 +59,7 @@ bot.start(async ctx=>{
  console.log("[START] /start received from Telegram user:",telegramId,"payload:",String(ctx.startPayload||"none"));
  try{
   await userFor(ctx);
-  await ctx.reply("⚽ WELCOME TO SOCCERFOUNDER!\\n\\n📋 Complete 6 tasks and submit screenshot evidence.\\n💰 Earn up to ₦1,100 in approved task rewards.\\n👥 Earn ₦100 for each eligible referral who completes all 6 tasks.\\n\\n📌 Sponsor/team leader must be Shane. All rewards require admin verification.",Markup.inlineKeyboard([
+  await ctx.reply("⚽ WELCOME TO SOCCERFOUNDER!\n\n📋 Complete 6 tasks and submit screenshot evidence.\n💰 Earn up to ₦1,100 in approved task rewards.\n👥 Earn ₦100 for each eligible referral who completes all 6 tasks.\n\n📌 Sponsor/team leader must be Shane. All rewards require admin verification.",Markup.inlineKeyboard([
    [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
    [Markup.button.callback("👥 Invite friends","referral")],
    [Markup.button.callback("📊 Check status","task_status"),Markup.button.callback("ℹ️ Help / Support","start_help")]
@@ -73,7 +73,7 @@ bot.start(async ctx=>{
 });
 bot.action("start_help",async ctx=>{
  await ctx.answerCbQuery();
- return ctx.reply("ℹ️ SOCCERFOUNDER HELP\\n\\nUse My tasks to complete the six campaign tasks in order. Upload screenshot evidence after pressing DONE. Admin approval unlocks the next task. My wallet shows approved rewards; Invite friends shows referral progress. For support, use the official SoccerFounder Support Group invite provided in the campaign. Never share passwords, OTPs or wallet recovery phrases.");
+ return ctx.reply("ℹ️ SOCCERFOUNDER HELP\n\nUse My tasks to complete the six campaign tasks in order. Upload screenshot evidence after pressing DONE. Admin approval unlocks the next task. My wallet shows approved rewards; Invite friends shows referral progress. For support, use the official SoccerFounder Support Group invite provided in the campaign. Never share passwords, OTPs or wallet recovery phrases.");
 });
 bot.action("tasks",async ctx=>{await ctx.answerCbQuery();await showCurrentTask(ctx);});
 bot.action("task_status",async ctx=>{
