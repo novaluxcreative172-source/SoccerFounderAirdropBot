@@ -38,33 +38,34 @@ enum WithdrawalStatus {
 }
 
 model User {
-  id                String   @id @default(cuid())
-  telegramId        String   @unique
-  username          String?
-  firstName         String?
-  lastName          String?
-  referralCode      String   @unique
-  referredById      String?
-  referredBy        User?    @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals         User[]   @relation("UserReferrals")
-  email             String?
-  phone             String?
-  superOneUsername  String?
-  superOneId        String?
-  sponsorName       String?
-  coachBotConfirmed Boolean  @default(false)
-  groupJoinedAt     DateTime?
-  engagementStartAt DateTime?
-  engagementDays    Int      @default(0)
-  engagementApproved Boolean @default(false)
-  suspended         Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  submissions       TaskSubmission[]
-  wallet            Wallet?
-  transactions      WalletTransaction[]
-  withdrawals       Withdrawal[]
-  engagement        EngagementActivity[]
+  id                  String   @id @default(cuid())
+  telegramId          String   @unique
+  username            String?
+  firstName           String?
+  lastName            String?
+  referralCode         String   @unique
+  referredById         String?
+  referredBy           User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals            User[]   @relation("UserReferrals")
+  referralRewardCredited Boolean @default(false)
+  email                String?
+  phone                String?
+  superOneUsername     String?
+  superOneId           String?
+  sponsorName          String?
+  coachBotConfirmed    Boolean  @default(false)
+  groupJoinedAt        DateTime?
+  engagementStartAt    DateTime?
+  engagementDays       Int      @default(0)
+  engagementApproved   Boolean  @default(false)
+  suspended            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  submissions          TaskSubmission[]
+  wallet               Wallet?
+  transactions         WalletTransaction[]
+  withdrawals          Withdrawal[]
+  engagement           EngagementActivity[]
 }
 
 model Task {
@@ -118,14 +119,14 @@ model WalletTransaction {
 }
 
 model EngagementActivity {
-  id          String   @id @default(cuid())
-  userId      String
-  activityDay String
-  messageCount Int     @default(0)
-  meaningfulCount Int  @default(0)
-  approved    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id])
+  id              String   @id @default(cuid())
+  userId          String
+  activityDay     String
+  messageCount    Int      @default(0)
+  meaningfulCount Int      @default(0)
+  approved        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id])
   @@unique([userId, activityDay])
 }
 
@@ -146,7 +147,7 @@ model Withdrawal {
 
 model CampaignSettings {
   id                    String   @id @default("default")
-  referralRewardKobo    Int      @default(0)
+  referralRewardKobo    Int      @default(10000)
   minimumWithdrawalKobo Int      @default(100000)
   engagementDays        Int      @default(30)
   dataBonusEnabled      Boolean  @default(false)
