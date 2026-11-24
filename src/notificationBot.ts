@@ -64,7 +64,7 @@ export async function notifyAdminPhoto(photoUrl: string, caption: string, submis
     console.error("[SCREENSHOT] FAILED: ADMIN_NOTIFICATION_BOT_TOKEN is not configured.");
     return false;
   }
-  const validAdminIds = adminIds.filter(id => /^\\d+$/.test(id));
+  const validAdminIds = adminIds.filter(id => /^\d+$/.test(id));
   if (validAdminIds.length === 0) {
     console.error("[SCREENSHOT] FAILED: no valid numeric ADMIN_IDS configured. Entries:", adminIds.length);
     return false;
