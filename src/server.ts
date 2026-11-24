@@ -57,7 +57,7 @@ app.post("/api/admin/submissions/:id/review",requireAdmin,async(req,res)=>{
   try{
    await bot.telegram.sendMessage(Number(before.user.telegramId),
     (approved?"✅ Your task was approved.":"❌ Your task was not approved.")+"\nTask: "+before.task.title+
-    (approved?"\nReward credited: ₦"+(before.task.rewardKobo/100).toLocaleString("en-NG"):"\nAdmin note: "+(note||"Please review the task instructions and submit again.")));
+    (approved?"\nReward credited: ₦"+(before.task.rewardKobo/100).toLocaleString("en-NG")+"\n\nOpen My tasks in the bot to continue to the next task.":"\nAdmin note: "+(note||"Please review the task instructions and submit again.")));
   }catch(e){console.error("Task review notification failed",e);}
   const after=await prisma.user.findUnique({where:{id:before.userId},select:{referralRewardCredited:true}});
   if(!wasReferralRewardCredited&&after?.referralRewardCredited&&before.user.referredBy){
