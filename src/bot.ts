@@ -171,7 +171,7 @@ bot.action("withdraw_confirm",async ctx=>{
  if(availableBefore<draft.amountKobo){
   withdrawalDrafts.delete(key);
   const shortfall=draft.amountKobo-availableBefore;
-  return ctx.reply("❌ INSUFFICIENT BALANCE — WITHDRAWAL NOT SUBMITTED\n\nRequested: "+fmt(draft.amountKobo)+"\nAvailable wallet balance: "+fmt(availableBefore)+"\nStill needed: "+fmt(shortfall)+"\n\nYou need "+fmt(shortfall)+" more in approved wallet earnings to make this withdrawal. No withdrawal request was created and no funds were deducted.");
+  return ctx.reply("❌ INSUFFICIENT BALANCE\n\n• Requested: "+fmt(draft.amountKobo)+"\n• Available: "+fmt(availableBefore)+"\n• Still needed: "+fmt(shortfall)+"\n\nNo withdrawal was created and no funds were deducted.");
  }
  try{
   const withdrawal=await prisma.$transaction(async tx=>{
@@ -182,7 +182,7 @@ bot.action("withdraw_confirm",async ctx=>{
    return request;
   });
   withdrawalDrafts.delete(key);
-  await ctx.reply("✅ WITHDRAWAL REQUEST SUBMITTED\n\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\n\nYour funds have been reserved. The admin will review and process your payment. You will receive a Telegram notification when it is marked PAID.\nReference: "+withdrawal.id);
+  await ctx.reply("✅ WITHDRAWAL REQUEST SUBMITTED\n\n• Amount: "+fmt(draft.amountKobo)+"\n• Account name: "+draft.accountName+"\n• Bank: "+draft.bankName+"\n• Account number: "+draft.accountNumber+"\n• Status: ⏳ Pending review\n\nYour funds have been reserved. You will be notified when payment is confirmed.\n🔖 Reference: "+withdrawal.id);
   await notifyAdminText("💸 NEW WITHDRAWAL REQUEST\nParticipant: "+(user.firstName||"")+" "+(user.lastName||"")+" (@"+(user.username||"no username")+")\nTelegram ID: "+user.telegramId+"\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\nWithdrawal ID: "+withdrawal.id+"\n\nReview in the admin dashboard. After manually transferring the funds, click Confirm Paid to notify the participant.");
  }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
 });
@@ -201,25 +201,25 @@ bot.on("text",async(ctx:any,next:any)=>{
  if(draft.step==="amount"){
   // Validate the requested amount and available wallet balance BEFORE asking for any bank details.
   const normalized=answer.replace(/[₦,\\s]/g,"");
-  if(!/^\d+(?:\.\d{1,2})?$/.test(normalized))return ctx.reply("❌ Invalid amount. Enter a valid naira amount, for example 2500. No withdrawal has been started.");
+  if(!/^\d+(?:\.\d{1,2})?$/.test(normalized))return ctx.reply("❌ INVALID AMOUNT\n\nEnter a valid naira amount, for example 2500. No withdrawal has been created.");
   const amount=Number(normalized);
   if(!Number.isFinite(amount)||amount<=0)return ctx.reply("❌ The withdrawal amount must be greater than zero. Please enter a valid amount.");
   const amountKobo=Math.round(amount*100);
   draft.amountKobo=amountKobo;draft.step="name";
-  return ctx.reply("Amount recorded: "+fmt(amountKobo)+".\n\nPlease enter the full name of the bank account holder. We will validate the minimum and your available wallet balance after collecting all bank details.");
+  return ctx.reply("✅ AMOUNT RECORDED\n\n• Withdrawal amount: "+fmt(amountKobo)+"\n\nNext, enter the bank account holder's full name.");
  }
  if(draft.step==="name"){
   if(answer.length<3||answer.length>100)return ctx.reply("Please enter a valid account holder name (3–100 characters).");
-  draft.accountName=answer;draft.step="bank";return ctx.reply("Which bank should receive your payment? Enter the bank name.");
+  draft.accountName=answer;draft.step="bank";return ctx.reply("🏦 Enter the name of the bank that should receive your payment.");
  }
  if(draft.step==="bank"){
   if(answer.length<2||answer.length>80)return ctx.reply("Please enter a valid bank name.");
-  draft.bankName=answer;draft.step="account";return ctx.reply("Please enter your 10-digit bank account number.");
+  draft.bankName=answer;draft.step="account";return ctx.reply("🔢 Enter your 10-digit bank account number.");
  }
  if(draft.step==="account"){
   if(!/^\d{10}$/.test(answer))return ctx.reply("Your account number must contain exactly 10 digits. Please try again.");
   draft.accountNumber=answer;draft.step="confirm";
-  return ctx.reply("PLEASE CONFIRM YOUR WITHDRAWAL DETAILS\n\nAmount: "+fmt(draft.amountKobo||0)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\n\nConfirm only if these details are correct.",Markup.inlineKeyboard([[Markup.button.callback("✅ Confirm withdrawal","withdraw_confirm")],[Markup.button.callback("Cancel","withdraw_cancel")]]));
+  return ctx.reply("🔎 CONFIRM WITHDRAWAL\n\n• Amount: "+fmt(draft.amountKobo||0)+"\n• Account name: "+draft.accountName+"\n• Bank: "+draft.bankName+"\n• Account number: "+draft.accountNumber+"\n\nCheck that all details are correct before confirming.",Markup.inlineKeyboard([[Markup.button.callback("✅ Confirm withdrawal","withdraw_confirm")],[Markup.button.callback("Cancel","withdraw_cancel")]]));
  }
  return next();
 });
