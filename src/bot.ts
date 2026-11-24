@@ -12,62 +12,68 @@ async function userFor(ctx:any){
  const user=await prisma.user.create({data:{telegramId:String(f.id),username:f.username,firstName:f.first_name,lastName:f.last_name,referralCode:randomBytes(5).toString("hex").toUpperCase(),referredById:ref?.telegramId===String(f.id)?null:ref?.id,wallet:{create:{}}}});
  return user;
 }
-bot.start(async ctx=>{
- await userFor(ctx);
- await ctx.reply("⚽ Welcome to SoccerFounder Airdrop & Rewards!\n\nComplete all six campaign tasks and submit evidence for admin review. Earn up to ₦800 in task rewards. Earn an additional ₦100 referral reward for each referred participant who completes and gets approval for all six tasks. Sponsor/team leader must be Shane. Rewards are subject to verification; no income is guaranteed.",Markup.inlineKeyboard([
- [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
- [Markup.button.callback("👥 Invite friends","referral")],
- [Markup.button.callback("🏦 Request withdrawal","withdraw_help")],
- [Markup.button.url("SoccerFounder website",config.WEBSITE_URL)],
- [Markup.button.url("Coach Bot","https://t.me/"+config.COACH_BOT_USERNAME)]
- ]));
-});
-bot.action("tasks",async ctx=>{
- await ctx.answerCbQuery();
- const rows=await prisma.task.findMany({where:{active:true},orderBy:{createdAt:"asc"}});
- const descriptions=[
-  "Register on SoccerFounder and submit your name, email and phone.",
-  "Register on Super One and submit your username and Super One ID.",
-  "Confirm that your sponsor/team leader is Shane.",
-  "Complete all six steps in the SoccerFounder Coach Bot.",
-  "Join the SoccerFounder Support Group and submit a screenshot for manual review.",
-  "Complete 30 days of genuine football engagement and submit evidence for manual review."
- ];
- const body=rows.map((task,i)=>(i+1)+". "+task.title+" — "+fmt(task.rewardKobo)+"\n"+(descriptions[i]||task.description));
- await ctx.reply("YOUR SIX CAMPAIGN TASKS\n\n"+body.join("\n\n")+"\n\nTOTAL TASK REWARDS: ₦800\n\nSubmit evidence with /submit TASK_NUMBER your details. Every task is subject to admin approval. Your ₦100 referral reward is paid only after the person you referred has all six tasks approved.");
-});
-bot.on("photo",async ctx=>{
- const caption=ctx.message.caption||"";
- const match=caption.match(/^\/submit(?:@\w+)?\s+(\d+)\s*(.*)$/i);
- if(!match)return ctx.reply("To submit a screenshot, add a caption in this format: /submit 5 I have joined the support group.");
- const n=Number(match[1]);
- const types=["WEBSITE_REGISTRATION","SUPER_ONE_REGISTRATION","SPONSOR_CONFIRMATION","COACH_BOT_COMPLETION","SUPPORT_GROUP_JOIN","FOOTBALL_ENGAGEMENT"];
- if(!Number.isInteger(n)||n<1||n>6)return ctx.reply("Please use a task number from 1 to 6 in your photo caption.");
+const TASK_FLOW=[
+ {type:"WEBSITE_REGISTRATION",title:"SoccerFounder Registration",description:"Register on "+config.WEBSITE_URL+". Submit your registered name, email and phone as evidence.",rewardKobo:10000},
+ {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Submit your username and Super One ID as evidence.",rewardKobo:10000},
+ {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"Your sponsor/team leader must be Shane. Confirm the sponsor name and submit it for verification.",rewardKobo:10000},
+ {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"Open @"+config.COACH_BOT_USERNAME+" and complete all six onboarding steps. Submit confirmation or a screenshot.",rewardKobo:10000},
+ {type:"SUPPORT_GROUP_JOIN",title:"Join the Support Group",description:"Join the SoccerFounder Support Group: "+(config.SUPPORT_GROUP_INVITE_URL||"use the campaign support group invite")+". Submit a screenshot as evidence.",rewardKobo:10000},
+ {type:"FOOTBALL_ENGAGEMENT",title:"30-Day Football Engagement",description:"Complete 30 days of genuine football engagement and submit your evidence.",rewardKobo:30000}
+] as const;
+const taskEvidenceDrafts=new Map<string,number>();
+async function showCurrentTask(ctx:any){
  const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
  if(!u)return ctx.reply("Please use /start first.");
- const task=await prisma.task.findUnique({where:{type:types[n-1] as any}});
- if(!task)return ctx.reply("Campaign tasks are not yet configured.");
- const existing=await prisma.taskSubmission.findUnique({where:{userId_taskId:{userId:u.id,taskId:task.id}}});
- if(existing?.status==="APPROVED")return ctx.reply("This task has already been approved. It cannot be submitted again.");
- const photo=ctx.message.photo[ctx.message.photo.length-1];
- await prisma.taskSubmission.upsert({
-  where:{userId_taskId:{userId:u.id,taskId:task.id}},
-  create:{userId:u.id,taskId:task.id,details:{text:match[2]||caption,photoFileId:photo.file_id}},
-  update:{details:{text:match[2]||caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}
+ const [tasks,submissions]=await Promise.all([
+  prisma.task.findMany({where:{active:true}}),
+  prisma.taskSubmission.findMany({where:{userId:u.id}})
+ ]);
+ const next=TASK_FLOW.findIndex(item=>{
+  const task=tasks.find(t=>t.type===item.type);
+  const sub=task?submissions.find(s=>s.taskId===task.id):null;
+  return !task||!sub||sub.status==="REJECTED";
  });
- await ctx.reply("Screenshot received for "+task.title+". Your submission is pending admin review. Reward if approved: "+fmt(task.rewardKobo)+".");
+ if(next===-1)return ctx.reply("🎉 All six tasks have been submitted! Any pending submissions are under admin review. Approved rewards will appear in My wallet.");
+ const item=TASK_FLOW[next],task=tasks.find(t=>t.type===item.type);
+ if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
+ const previous=submissions.find(s=>s.taskId===task.id);
+ const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. Please review the instructions and submit again.":"";
+ return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence and continue.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
+}
+bot.start(async ctx=>{
+ await userFor(ctx);
+ await ctx.reply("⚽ Welcome! Complete tasks, earn rewards and invite friends.",Markup.inlineKeyboard([
+  [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
+  [Markup.button.callback("👥 Invite friends","referral")]
+ ]));
 });
-bot.command("submit",async ctx=>{
- const bits=ctx.message.text.split(" "); const n=Number(bits[1]);
- const types=["WEBSITE_REGISTRATION","SUPER_ONE_REGISTRATION","SPONSOR_CONFIRMATION","COACH_BOT_COMPLETION","SUPPORT_GROUP_JOIN","FOOTBALL_ENGAGEMENT"];
- if(!Number.isInteger(n)||n<1||n>6)return ctx.reply("Usage: /submit 1 your details. Use /tasks for the checklist and rewards.");
- const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}}); if(!u)return ctx.reply("Please use /start first.");
- const task=await prisma.task.findUnique({where:{type:types[n-1] as any}}); if(!task)return ctx.reply("Campaign tasks are not yet configured.");
- const details=bits.slice(2).join(" ");
- if(!details.trim())return ctx.reply("Please include your evidence or details after the task number. For example: /submit 5 I have joined the support group; screenshot attached separately.");
- await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:details}},update:{details:{text:details},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
- await ctx.reply("Submission received for "+task.title+". It is pending administrator verification. Reward if approved: "+fmt(task.rewardKobo)+".");
+bot.action("tasks",async ctx=>{await ctx.answerCbQuery();await showCurrentTask(ctx);});
+for(let n=1;n<=6;n++){
+ bot.action("task_done_"+n,async ctx=>{
+  await ctx.answerCbQuery();
+  const user=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
+  if(!user)return ctx.reply("Please use /start first.");
+  const [tasks,subs]=await Promise.all([prisma.task.findMany({where:{active:true}}),prisma.taskSubmission.findMany({where:{userId:user.id}})]);
+  const current=TASK_FLOW.findIndex(item=>{const t=tasks.find(x=>x.type===item.type);const s=t?subs.find(x=>x.taskId===t.id):null;return !t||!s||s.status==="REJECTED";});
+  if(current!==n-1)return showCurrentTask(ctx);
+  taskEvidenceDrafts.set(String(ctx.from.id),n);
+  return ctx.reply("Great! Send your evidence for Task "+n+" now. You can send a written explanation or a screenshot. Your submission will be sent to the admin for review. Send /cancel to stop.");
+ });
+}
+bot.on("photo",async ctx=>{
+ const key=String(ctx.from.id),n=taskEvidenceDrafts.get(key);
+ if(!n)return ctx.reply("Open My tasks and follow the current task to submit evidence.");
+ const item=TASK_FLOW[n-1],u=await prisma.user.findUnique({where:{telegramId:key}});
+ if(!u)return ctx.reply("Please use /start first.");
+ const task=await prisma.task.findUnique({where:{type:item.type as any}});
+ if(!task)return ctx.reply("This task is not configured yet.");
+ const photo=ctx.message.photo[ctx.message.photo.length-1],caption=ctx.message.caption||"";
+ await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
+ taskEvidenceDrafts.delete(key);
+ await ctx.reply("✅ Evidence submitted for Task "+n+". It is pending admin review. You can continue to the next task.");
+ await showCurrentTask(ctx);
 });
+bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaign one task at a time. Open the current task, press DONE, then send your evidence when prompted."));
 bot.action("wallet",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
@@ -110,6 +116,23 @@ bot.action("withdraw_confirm",async ctx=>{
   withdrawalDrafts.delete(key);
   await ctx.reply("✅ Your withdrawal request has been submitted.\n\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\n\nYour funds have been reserved. Payment is manual and will only be marked Paid after administrator confirmation.\nReference: "+withdrawal.id);
  }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
+});
+bot.on("text",async(ctx:any,next:any)=>{
+ const key=String(ctx.from.id),n=taskEvidenceDrafts.get(key);
+ if(n){
+  const answer=ctx.message.text.trim();
+  if(answer.startsWith("/"))return next();
+  if(answer.length<3)return ctx.reply("Please provide a little more detail about your completed task, or send a screenshot.");
+  const item=TASK_FLOW[n-1],u=await prisma.user.findUnique({where:{telegramId:key}});
+  if(!u)return ctx.reply("Please use /start first.");
+  const task=await prisma.task.findUnique({where:{type:item.type as any}});
+  if(!task)return ctx.reply("This task is not configured yet.");
+  await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:answer}},update:{details:{text:answer},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
+  taskEvidenceDrafts.delete(key);
+  await ctx.reply("✅ Evidence submitted for Task "+n+". It is pending admin review. You can continue to the next task.");
+  return showCurrentTask(ctx);
+ }
+ return next();
 });
 bot.on("text",async(ctx:any,next:any)=>{
  const key=String(ctx.from.id),draft=withdrawalDrafts.get(key);
