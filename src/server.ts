@@ -151,9 +151,20 @@ async function main(){
  app.listen(config.PORT,()=>console.log("Server listening on "+config.PORT));
  const notificationBot=adminNotificationBot;
  if(notificationBot){
-  void launchTelegramWithRateLimitRetry(()=>notificationBot.launch()).then(()=>console.log("Admin notification bot connected successfully.")).catch(error=>console.error("Admin notification bot startup failed:",error));
+  console.log("ADMIN_NOTIFICATION_BOT_TOKEN is present. Verifying the separate admin notification bot with Telegram...");
+  void notificationBot.telegram.getMe().then(async identity=>{
+   console.log("Admin notification bot token is valid for @"+identity.username+". Starting its Telegram polling listener...");
+   try{
+    await launchTelegramWithRateLimitRetry(()=>notificationBot.launch());
+    console.log("Admin notification bot connected successfully as @"+identity.username+".");
+   }catch(error){
+    console.error("Admin notification bot polling startup failed for @"+identity.username+":",error);
+   }
+  }).catch(error=>{
+   console.error("Admin notification bot token verification failed. Check that ADMIN_NOTIFICATION_BOT_TOKEN is the token for the separate notification bot:",error);
+  });
  }else{
-  console.warn("ADMIN_NOTIFICATION_BOT_TOKEN is not configured. Admin alerts will be unavailable until it is added in Render.");
+  console.error("ADMIN_NOTIFICATION_BOT_TOKEN is missing or empty in this Render service. The separate admin notification bot will not start and task screenshots cannot be forwarded.");
  }
  await launchTelegramWithRateLimitRetry(startTelegram);
 }
