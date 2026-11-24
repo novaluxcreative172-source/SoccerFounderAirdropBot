@@ -133,6 +133,7 @@ async function launchTelegramWithRateLimitRetry(start:()=>Promise<unknown>){
 async function main(){
  await prisma.$connect();
  let startTelegram:()=>Promise<unknown>;
+ let adminWebhookUrl: string | undefined;
  if(config.WEBHOOK_DOMAIN && config.NODE_ENV==="production"){
   console.log("Telegram startup mode: WEBHOOK. WEBHOOK_DOMAIN is set and NODE_ENV is production. WEBHOOK_SECRET present: "+Boolean(config.WEBHOOK_SECRET)+".");
   if(!config.WEBHOOK_SECRET)throw new Error("WEBHOOK_SECRET is required when webhook mode is enabled.");
@@ -146,7 +147,7 @@ async function main(){
   if(adminNotificationBot) app.use(adminNotificationBot.webhookCallback(adminWebhookPath));
 
   const expectedWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath;
-  const expectedAdminWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+adminWebhookPath;
+  adminWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+adminWebhookPath;
   startTelegram=async()=>{
    console.log("Registering Telegram webhook directly; skipping getWebhookInfo to avoid the currently rate-limited API call.");
    await bot.telegram.setWebhook(expectedWebhookUrl,{secret_token:config.WEBHOOK_SECRET});
@@ -165,7 +166,7 @@ async function main(){
    try{
     if(config.WEBHOOK_DOMAIN && config.NODE_ENV==="production"){
      console.log("Registering admin notification webhook; polling is disabled in production to prevent getUpdates conflicts.");
-     await notificationBot.telegram.setWebhook(expectedAdminWebhookUrl,{secret_token:config.WEBHOOK_SECRET});
+     await notificationBot.telegram.setWebhook(adminWebhookUrl!,{secret_token:config.WEBHOOK_SECRET});
      console.log("Admin notification webhook registration succeeded for @"+identity.username+".");
     }else{
      console.log("Starting admin notification bot polling listener in non-production mode...");
