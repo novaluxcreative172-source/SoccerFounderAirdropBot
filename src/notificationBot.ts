@@ -55,30 +55,48 @@ export function registerAdminReviewHandler(handler: AdminReviewHandler): void {
   });
 }
 
-export async function notifyAdminPhoto(photoUrl: string, caption: string, submissionId: string): Promise<void> {
+export async function notifyAdminPhoto(photoUrl: string, caption: string, submissionId: string): Promise<boolean> {
   if (!adminNotificationBot) {
-    console.warn("Admin notification bot token is not configured; admin screenshot was not forwarded.");
-    return;
+    console.error("Screenshot delivery failed: ADMIN_NOTIFICATION_BOT_TOKEN is not configured.");
+    return false;
   }
-  for (const adminId of adminIds) {
-    try {
-      
-      const response = await fetch(photoUrl);
-      if (!response.ok) throw new Error("Could not download evidence image from Telegram.");
-      const bytes = Buffer.from(await response.arrayBuffer());
-      await adminNotificationBot.telegram.sendPhoto(
-        Number(adminId),
-        Input.fromBuffer(bytes, "task-evidence.jpg"),
-        {
-          caption,
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback("✅ Approve task", "review_approve_" + submissionId)],
-            [Markup.button.callback("❌ Reject task", "review_reject_" + submissionId)]
-          ])
-        }
-      );
-    } catch (error) {
-      console.error("Could not send admin screenshot to", adminId, error);
+  if (adminIds.length === 0) {
+    console.error("Screenshot delivery failed: ADMIN_IDS is empty.");
+    return false;
+  }
+
+  let delivered = 0;
+  try {
+    const response = await fetch(photoUrl);
+    if (!response.ok) throw new Error("Main bot Telegram file download failed with HTTP " + response.status);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length === 0) throw new Error("Downloaded screenshot is empty.");
+
+    for (const adminId of adminIds) {
+      if (!/^\\d+$/.test(adminId)) {
+        console.error("Screenshot delivery skipped: invalid ADMIN_IDS entry:", adminId);
+        continue;
+      }
+      try {
+        await adminNotificationBot.telegram.sendPhoto(
+          Number(adminId),
+          Input.fromBuffer(bytes, "task-evidence.jpg"),
+          {
+            caption,
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback("✅ Approve task", "review_approve_" + submissionId)],
+              [Markup.button.callback("❌ Reject task", "review_reject_" + submissionId)]
+            ])
+          }
+        );
+        delivered++;
+        console.log("Task screenshot successfully delivered to admin Telegram ID", adminId, "for submission", submissionId);
+      } catch (error: any) {
+        console.error("Task screenshot delivery failed for admin Telegram ID", adminId, "submission", submissionId, "Telegram error:", error?.response?.description || error?.description || error?.message || error);
+      }
     }
+  } catch (error: any) {
+    console.error("Task screenshot could not be downloaded or forwarded. Submission:", submissionId, "Error:", error?.response?.description || error?.description || error?.message || error);
   }
+  return delivered > 0;
 }
