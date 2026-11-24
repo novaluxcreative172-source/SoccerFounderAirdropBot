@@ -29,7 +29,7 @@ app.get("/api/admin/submissions",requireAdmin,async(req,res)=>{
  const rows=await prisma.taskSubmission.findMany({
   where:status==="ALL"?{}:{status:status as any},
   include:{task:true,user:{select:{id:true,telegramId:true,username:true,firstName:true,lastName:true}}},
-  orderBy:{createdAt:"desc"},take:1000
+  orderBy:{createdAt:"desc"}
  });
  res.json(rows);
 });
