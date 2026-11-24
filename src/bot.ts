@@ -2,7 +2,8 @@ import {Telegraf,Markup} from "telegraf";
 import {randomBytes} from "node:crypto";
 import {prisma} from "./db";
 import {config} from "./config";
-import {notifyAdminPhoto,notifyAdminText} from "./notificationBot";
+import {notifyAdminPhoto,notifyAdminText,registerAdminReviewHandler} from "./notificationBot";
+import {reviewSubmission} from "./services/review";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
 const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
 async function userFor(ctx:any){
@@ -14,8 +15,8 @@ async function userFor(ctx:any){
  return user;
 }
 const TASK_FLOW=[
- {type:"WEBSITE_REGISTRATION",title:"Register on the SoccerFounder Website",description:"1. Visit "+config.WEBSITE_URL+". 2. Register on the website. 3. Download the SoccerFounder app from the website and complete the registration in the app. 4. Take a screenshot showing that your registration is complete, then send the screenshot here. Your evidence for this task must be a screenshot of your completed registration. Do not type your name, email or phone number in the chat.",rewardKobo:10000},
- {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Take a clear screenshot showing your completed registration or Super One ID in the app, then upload that screenshot here. Do not send your password, OTP or other login security details.",rewardKobo:10000},
+ {type:"WEBSITE_REGISTRATION",title:"Register on the SoccerFounder Website",description:"1. Visit "+config.WEBSITE_URL+". 2. Register on the website. 3. Download the SoccerFounder app from the website and complete the registration in the app. 4. Take a screenshot showing that your registration is complete, then send the screenshot here. Your evidence for this task must be a screenshot of your completed registration. Do not type your name, email or phone number in the chat.",rewardKobo:30000},
+ {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Take a clear screenshot showing your completed registration or Super One ID in the app, then upload that screenshot here. Do not send your password, OTP or other login security details.",rewardKobo:20000},
  {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"Your sponsor/team leader must be Shane. Take a screenshot showing Shane as your sponsor/team leader in the relevant account screen, then upload it here. Hide unrelated personal information where possible.",rewardKobo:10000},
  {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"Open @"+config.COACH_BOT_USERNAME+" and complete all six onboarding steps. Take a screenshot showing the completed steps or completion confirmation, then upload it here.",rewardKobo:10000},
  {type:"SUPPORT_GROUP_JOIN",title:"Join the Support Group",description:"Join the SoccerFounder Support Group: "+(config.SUPPORT_GROUP_INVITE_URL||"use the campaign support group invite")+". Take a screenshot showing that you have joined the group, then upload it here.",rewardKobo:10000},
@@ -44,12 +45,31 @@ async function showCurrentTask(ctx:any){
 }
 bot.start(async ctx=>{
  await userFor(ctx);
- await ctx.reply("⚽ Welcome! Complete tasks, earn rewards and invite friends.",Markup.inlineKeyboard([
+ await ctx.reply("⚽ Welcome to SoccerFounder Airdrop & Rewards!\n\nComplete all six campaign tasks and submit screenshot evidence for admin review. Earn up to ₦1,100 in approved task rewards, plus ₦100 for each eligible referral who completes all six tasks and receives approval. Sponsor/team leader must be Shane. Rewards are subject to verification; no income is guaranteed.",Markup.inlineKeyboard([
   [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
   [Markup.button.callback("👥 Invite friends","referral")]
  ]));
 });
 bot.action("tasks",async ctx=>{await ctx.answerCbQuery();await showCurrentTask(ctx);});
+bot.action("task_status",async ctx=>{
+ await ctx.answerCbQuery();
+ const user=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
+ if(!user)return ctx.reply("Please use /start first.");
+ const rows=await prisma.taskSubmission.findMany({where:{userId:user.id},include:{task:true},orderBy:{reviewedAt:"desc"}});
+ const pending=rows.find(row=>row.status==="PENDING");
+ if(pending){
+  const index=TASK_FLOW.findIndex(item=>item.type===pending.task.type);
+  return ctx.reply("⏳ TASK "+(index+1)+" OF 6 — UNDER REVIEW\n"+pending.task.title+"\nReward pending approval: "+fmt(pending.task.rewardKobo)+"\n\nYour screenshot has been received and is waiting for admin review. No reward is credited until approval.");
+ }
+ const latestApproved=rows.find(row=>row.status==="APPROVED");
+ if(latestApproved){
+  const index=TASK_FLOW.findIndex(item=>item.type===latestApproved.task.type);
+  await ctx.reply("✅ TASK "+(index+1)+" COMPLETED\n"+latestApproved.task.title+"\n💰 Reward earned: "+fmt(latestApproved.task.rewardKobo)+"\n\nYour reward has been credited to My wallet.");
+ }else{
+  await ctx.reply("No task has been approved yet. Open My tasks to begin and submit your screenshot evidence.");
+ }
+ return showCurrentTask(ctx);
+});
 for(let n=1;n<=6;n++){
  bot.action("task_done_"+n,async ctx=>{
   await ctx.answerCbQuery();
@@ -76,7 +96,8 @@ bot.on("photo",async ctx=>{
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
  await ctx.reply("✅ Screenshot received for Task "+n+". It is now awaiting admin review. Task "+(n+1)+" will unlock only after approval.");
- await notifyAdminPhoto(photo.file_id,"📥 NEW TASK EVIDENCE\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\n"+(caption?"Details: "+caption:"No caption provided."));
+ const photoUrl=await ctx.telegram.getFileLink(photo.file_id);
+ await notifyAdminPhoto(photoUrl.href,"📥 NEW TASK EVIDENCE\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\n"+(caption?"Details: "+caption:"No caption provided."),submission.id);
 
 });
 bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaign one task at a time. Open the current task, press DONE, then send your evidence when prompted."));
@@ -184,4 +205,14 @@ bot.command("wallet",async ctx=>{
  const w=u.wallet;return ctx.reply("Available: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nSend /withdraw to start a guided withdrawal, one question at a time.");
 });
 bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the SoccerFounder Support Group using the invite link provided in the campaign."));
+registerAdminReviewHandler(async (submissionId, approved, adminId) => {
+ const existing=await prisma.taskSubmission.findUnique({where:{id:submissionId},include:{user:true,task:true}});
+ if(!existing)throw new Error("Submission not found");
+ await reviewSubmission(submissionId,approved,approved?"Approved from admin notification bot":"Please review the task instructions and submit new screenshot evidence.",adminId);
+ const message=approved
+  ? "✅ Your task was approved.\nTask: "+existing.task.title+"\nReward credited: "+fmt(existing.task.rewardKobo)+"\n\nOpen My tasks or press Check task status to see your completed task and continue."
+  : "❌ Your task was not approved.\nTask: "+existing.task.title+"\nPlease review the task instructions and submit a new screenshot.";
+ await bot.telegram.sendMessage(Number(existing.user.telegramId),message);
+ return approved ? "Reward credited: "+fmt(existing.task.rewardKobo) : "Participant can resubmit.";
+});
 bot.catch((err)=>console.error("Bot error",err));
