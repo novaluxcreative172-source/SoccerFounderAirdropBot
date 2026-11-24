@@ -192,6 +192,32 @@ bot.action("withdraw_cancel",async ctx=>{
  await ctx.answerCbQuery();withdrawalDrafts.delete(String(ctx.from.id));
  await ctx.reply("Your withdrawal request has been cancelled. No money was deducted.");
 });
+bot.action(/^withdraw_user_cancel_([A-Za-z0-9_-]+)$/,async ctx=>{
+ await ctx.answerCbQuery();
+ const withdrawalId=ctx.match[1],telegramId=String(ctx.from.id);
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   const user=await tx.user.findUnique({where:{telegramId}});
+   if(!user)throw new Error("USER_NOT_FOUND");
+   const request=await tx.withdrawal.findUnique({where:{id:withdrawalId}});
+   if(!request||request.userId!==user.id)throw new Error("WITHDRAWAL_NOT_FOUND");
+   if(request.status==="PAID")throw new Error("ALREADY_PAID");
+   if(request.status==="CANCELLED"||request.status==="REJECTED")throw new Error("ALREADY_RETURNED");
+   const changed=await tx.withdrawal.updateMany({where:{id:withdrawalId,userId:user.id,status:{in:["PENDING","APPROVED"]}},data:{status:"CANCELLED",adminNote:"Cancelled by participant before payment confirmation"}});
+   if(changed.count!==1)throw new Error("STATUS_CHANGED");
+   await tx.wallet.update({where:{userId:user.id},data:{pendingKobo:{decrement:request.amountKobo},availableKobo:{increment:request.amountKobo}}});
+   await tx.walletTransaction.create({data:{userId:user.id,type:"WITHDRAWAL_REFUND",amountKobo:request.amountKobo,reference:"withdrawal:"+withdrawalId+":participant-cancel-refund",description:"Withdrawal cancelled by participant; reserved funds returned to available balance"}});
+   return request;
+  });
+  await ctx.editMessageText("↩️ WITHDRAWAL CANCELLED — FUNDS RETURNED\n\n• Amount returned: "+fmt(result.amountKobo)+"\n• Status: CANCELLED / RETURNED\n\nThe full amount is back in your available wallet balance. You can start a new withdrawal request whenever you are ready.");
+  try{await adminNotificationBotPlaceholder();}
+  catch(_){}
+ }catch(error:any){
+  const msg=String(error?.message||"");
+  const response=msg==="ALREADY_PAID"?"This withdrawal has already been paid and cannot be reversed here.":msg==="ALREADY_RETURNED"?"This withdrawal has already been cancelled or returned.":msg==="WITHDRAWAL_NOT_FOUND"?"This withdrawal request was not found in your account.":"This request can no longer be cancelled. Please refresh your wallet or contact support.";
+  await ctx.reply(response);
+ }
+});
 bot.action("withdraw_confirm",async ctx=>{
  await ctx.answerCbQuery();
  const key=String(ctx.from.id),draft=withdrawalDrafts.get(key);
@@ -217,7 +243,7 @@ bot.action("withdraw_confirm",async ctx=>{
    return request;
   });
   withdrawalDrafts.delete(key);
-  await ctx.reply("✅ WITHDRAWAL REQUEST SUBMITTED\n\n• Amount: "+fmt(draft.amountKobo)+"\n• Account name: "+draft.accountName+"\n• Bank: "+draft.bankName+"\n• Account number: "+draft.accountNumber+"\n• Status: ⏳ Pending review\n\nYour funds have been reserved. You will be notified when payment is confirmed.\n🔖 Reference: "+withdrawal.id);
+  await ctx.reply("✅ WITHDRAWAL REQUEST SUBMITTED\n\n• Amount: "+fmt(draft.amountKobo)+"\n• Account name: "+draft.accountName+"\n• Bank: "+draft.bankName+"\n• Account number: "+draft.accountNumber+"\n• Status: ⏳ Pending review\n\nYour funds are reserved, not paid. Until an admin confirms payment, you can cancel this request and the full amount will return to your available wallet balance.\n🔖 Reference: "+withdrawal.id,Markup.inlineKeyboard([[Markup.button.callback("↩️ Cancel withdrawal & return funds","withdraw_user_cancel_"+withdrawal.id)]]));
   await notifyAdminWithdrawal("💸 NEW WITHDRAWAL REQUEST\nParticipant: "+(user.firstName||"")+" "+(user.lastName||"")+" (@"+(user.username||"no username")+")\nTelegram ID: "+user.telegramId+"\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\nWithdrawal ID: "+withdrawal.id+"\n\nAfter you manually transfer the money, press the Confirm Paid button below. The participant will receive a payment confirmation in the Airdrop Bot.",withdrawal.id);
  }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
 });
@@ -301,7 +327,7 @@ registerAdminWithdrawalHandler(async (withdrawalId, adminId) => {
   const withdrawal=await tx.withdrawal.findUnique({where:{id:withdrawalId},include:{user:true}});
   if(!withdrawal)throw new Error("Withdrawal not found");
   if(withdrawal.status==="PAID")throw new Error("already paid");
-  if(withdrawal.status==="REJECTED")throw new Error("Withdrawal was rejected");
+  if(withdrawal.status==="REJECTED"||withdrawal.status==="CANCELLED")throw new Error("Withdrawal is no longer payable");
   const changed=await tx.withdrawal.updateMany({where:{id:withdrawalId,status:{in:["PENDING","APPROVED"]}},data:{status:"PAID",adminNote:"Payment manually confirmed from admin notification bot"}});
   if(!changed.count)throw new Error("Withdrawal status changed; refresh the admin dashboard");
   await tx.wallet.update({where:{userId:withdrawal.userId},data:{pendingKobo:{decrement:withdrawal.amountKobo},withdrawnKobo:{increment:withdrawal.amountKobo}}});
