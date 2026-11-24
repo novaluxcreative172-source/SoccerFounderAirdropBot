@@ -92,8 +92,9 @@ async function askWithdrawalAmount(ctx:any) {
 bot.action("withdraw_help",async ctx=>{await ctx.answerCbQuery();await askWithdrawalAmount(ctx);});
 bot.command("withdraw",async ctx=>askWithdrawalAmount(ctx));
 bot.command("cancel",async ctx=>{
+ const hadTask=taskEvidenceDrafts.delete(String(ctx.from.id));
  const hadDraft=withdrawalDrafts.delete(String(ctx.from.id));
- await ctx.reply(hadDraft?"Your withdrawal request has been cancelled. No money was deducted.":"There is no active withdrawal request to cancel.");
+ await ctx.reply((hadDraft||hadTask)?"Your current process has been cancelled. No money was deducted.":"There is no active process to cancel.");
 });
 bot.action("withdraw_cancel",async ctx=>{
  await ctx.answerCbQuery();withdrawalDrafts.delete(String(ctx.from.id));
