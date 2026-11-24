@@ -64,7 +64,7 @@ export async function notifyAdminReview(message: string, submissionId: string): 
     console.error("[SUBMISSION] FAILED: ADMIN_NOTIFICATION_BOT_TOKEN is not configured.");
     return false;
   }
-  const validAdminIds = adminIds.filter(id => /^\\d+$/.test(id));
+  const validAdminIds = adminIds.filter(id => /^\d+$/.test(id));
   if (validAdminIds.length === 0) {
     console.error("[SUBMISSION] FAILED: no valid numeric ADMIN_IDS configured.");
     return false;
