@@ -163,7 +163,7 @@ bot.on("text",async(ctx:any,next:any)=>{
  if(draft.step==="amount"){
   // Validate the requested amount and available wallet balance BEFORE asking for any bank details.
   const normalized=answer.replace(/[₦,\\s]/g,"");
-  if(!/^\\d+(?:\\.\\d{1,2})?$/.test(normalized))return ctx.reply("❌ Invalid amount. Enter a valid naira amount, for example 2500. No withdrawal has been started.");
+  if(!/^\d+(?:\.\d{1,2})?$/.test(normalized))return ctx.reply("❌ Invalid amount. Enter a valid naira amount, for example 2500. No withdrawal has been started.");
   const amount=Number(normalized);
   if(!Number.isFinite(amount)||amount<=0)return ctx.reply("❌ The withdrawal amount must be greater than zero. Please enter a valid amount.");
   const amountKobo=Math.round(amount*100);
