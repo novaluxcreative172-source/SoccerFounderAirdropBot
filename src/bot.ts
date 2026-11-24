@@ -7,11 +7,21 @@ import {reviewSubmission} from "./services/review";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
 const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
 async function userFor(ctx:any){
- const f=ctx.from; const found=await prisma.user.findUnique({where:{telegramId:String(f.id)}});
- if(found)return found;
- const payload=ctx.startPayload||"";
+ const from=ctx.from;
+ if(!from?.id)throw new Error("Telegram sender information is missing.");
+ const telegramId=String(from.id);
+ const payload=String(ctx.startPayload||"").trim();
  const ref=payload?await prisma.user.findUnique({where:{referralCode:payload}}):null;
- const user=await prisma.user.create({data:{telegramId:String(f.id),username:f.username,firstName:f.first_name,lastName:f.last_name,referralCode:randomBytes(5).toString("hex").toUpperCase(),referredById:ref?.telegramId===String(f.id)?null:ref?.id,wallet:{create:{}}}});
+ const user=await prisma.user.upsert({
+  where:{telegramId},
+  create:{
+   telegramId,username:from.username,firstName:from.first_name,lastName:from.last_name,
+   referralCode:randomBytes(8).toString("hex").toUpperCase(),
+   referredById:ref?.telegramId===telegramId?null:ref?.id
+  },
+  update:{username:from.username,firstName:from.first_name,lastName:from.last_name}
+ });
+ await prisma.wallet.upsert({where:{userId:user.id},create:{userId:user.id},update:{}});
  return user;
 }
 const TASK_FLOW=[
@@ -45,11 +55,25 @@ async function showCurrentTask(ctx:any){
  return ctx.reply("📝 TASK "+(next+1)+" OF 6\n\n"+item.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n\n📌 HOW TO COMPLETE\n"+item.description+note+"\n\n📸 When finished, tap DONE and upload your screenshot.\n🔒 The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
 bot.start(async ctx=>{
- await userFor(ctx);
- await ctx.reply("⚽ WELCOME TO SOCCERFOUNDER!\n\n📋 Complete 6 tasks and submit screenshot evidence.\n💰 Earn up to ₦1,100 in approved task rewards.\n👥 Earn ₦100 for each eligible referral who completes all 6 tasks.\n\n📌 Sponsor/team leader must be Shane. All rewards require admin verification.",Markup.inlineKeyboard([
-  [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
-  [Markup.button.callback("👥 Invite friends","referral")]
- ]));
+ const telegramId=String(ctx.from?.id||"unknown");
+ console.log("[START] /start received from Telegram user:",telegramId,"payload:",String(ctx.startPayload||"none"));
+ try{
+  await userFor(ctx);
+  await ctx.reply("⚽ WELCOME TO SOCCERFOUNDER!\\n\\n📋 Complete 6 tasks and submit screenshot evidence.\\n💰 Earn up to ₦1,100 in approved task rewards.\\n👥 Earn ₦100 for each eligible referral who completes all 6 tasks.\\n\\n📌 Sponsor/team leader must be Shane. All rewards require admin verification.",Markup.inlineKeyboard([
+   [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
+   [Markup.button.callback("👥 Invite friends","referral")],
+   [Markup.button.callback("📊 Check status","task_status"),Markup.button.callback("ℹ️ Help / Support","start_help")]
+  ]));
+  console.log("[START] Welcome menu delivered to Telegram user:",telegramId);
+ }catch(error:any){
+  console.error("[START] Failed for Telegram user:",telegramId,"error:",error?.stack||error?.message||String(error));
+  try{await ctx.reply("⚠️ SoccerFounder could not open your account right now. Your existing progress has not been deleted. Please try /start again in a moment. If this continues, contact support.");}
+  catch(replyError){console.error("[START] Could not send failure reply to Telegram user:",telegramId,replyError);}
+ }
+});
+bot.action("start_help",async ctx=>{
+ await ctx.answerCbQuery();
+ return ctx.reply("ℹ️ SOCCERFOUNDER HELP\\n\\nUse My tasks to complete the six campaign tasks in order. Upload screenshot evidence after pressing DONE. Admin approval unlocks the next task. My wallet shows approved rewards; Invite friends shows referral progress. For support, use the official SoccerFounder Support Group invite provided in the campaign. Never share passwords, OTPs or wallet recovery phrases.");
 });
 bot.action("tasks",async ctx=>{await ctx.answerCbQuery();await showCurrentTask(ctx);});
 bot.action("task_status",async ctx=>{
