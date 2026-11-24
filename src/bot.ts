@@ -135,7 +135,7 @@ bot.on("text",async(ctx:any,next:any)=>{
   draft.bankName=answer;draft.step="account";return ctx.reply("Please enter your 10-digit bank account number.");
  }
  if(draft.step==="account"){
-  if(!/^\\d{10}$/.test(answer))return ctx.reply("Your account number must contain exactly 10 digits. Please try again.");
+  if(!/^\d{10}$/.test(answer))return ctx.reply("Your account number must contain exactly 10 digits. Please try again.");
   draft.accountNumber=answer;draft.step="confirm";
   return ctx.reply("PLEASE CONFIRM YOUR WITHDRAWAL DETAILS\n\nAmount: "+fmt(draft.amountKobo||0)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\n\nConfirm only if these details are correct.",Markup.inlineKeyboard([[Markup.button.callback("✅ Confirm withdrawal","withdraw_confirm")],[Markup.button.callback("Cancel","withdraw_cancel")]]));
  }
