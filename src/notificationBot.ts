@@ -73,7 +73,7 @@ export async function notifyAdminPhoto(photoUrl: string, caption: string, submis
     if (bytes.length === 0) throw new Error("Downloaded screenshot is empty.");
 
     for (const adminId of adminIds) {
-      if (!/^\\d+$/.test(adminId)) {
+      if (!/^\d+$/.test(adminId)) {
         console.error("Screenshot delivery skipped: invalid ADMIN_IDS entry:", adminId);
         continue;
       }
