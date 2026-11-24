@@ -39,7 +39,7 @@ async function showCurrentTask(ctx:any){
  const item=TASK_FLOW[next],task=tasks.find(t=>t.type===item.type);
  if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
  const previous=submissions.find(s=>s.taskId===task.id);
- if(previous?.status==="PENDING")return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: EVIDENCE RECEIVED — WAITING FOR ADMIN REVIEW.\\n\\nYou have already submitted this task. There is nothing else to submit right now. Once the admin approves it, the bot will unlock and send you the next task. You can check back by tapping My tasks.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","task_status")]]));
+ if(previous?.status==="PENDING")return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: UNDER REVIEW — YOUR SCREENSHOT HAS BEEN RECEIVED.\\n\\nPlease wait for the admin decision. Press Check task status to refresh.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","task_status")]]));
  const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. "+(previous.reviewNote||"Please review the instructions and submit new evidence."):"";
  return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence. The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
@@ -222,7 +222,7 @@ registerAdminReviewHandler(async (submissionId, approved, adminId) => {
  const message=approved
   ? "✅ Your task was approved.\nTask: "+existing.task.title+"\nReward credited: "+fmt(existing.task.rewardKobo)+"\n\nOpen My tasks or press Check task status to see your completed task and continue."
   : "❌ Your task was not approved.\nTask: "+existing.task.title+"\nPlease review the task instructions and submit a new screenshot.";
- await bot.telegram.sendMessage(Number(existing.user.telegramId),message);
+ try { await bot.telegram.sendMessage(Number(existing.user.telegramId),message); } catch (error) { console.error("Participant task review notification failed:",error); }
  return approved ? "Reward credited: "+fmt(existing.task.rewardKobo) : "Participant can resubmit.";
 });
 bot.catch((err)=>console.error("Bot error",err));
