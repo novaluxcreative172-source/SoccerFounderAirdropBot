@@ -12,6 +12,7 @@ import {reviewSubmission} from "./services/review";
 const app=express();
 app.disable("x-powered-by"); app.use(helmet({contentSecurityPolicy:false})); app.use(compression()); app.use(express.json({limit:"32kb"}));
 app.use("/api",rateLimit({windowMs:60000,limit:90}));
+app.get("/",(_req,res)=>res.sendFile(path.resolve(process.cwd(),"public/index.html")));
 app.get("/health",(_req,res)=>res.json({status:"ok",service:"SoccerFounder Airdrop Bot"}));
 function safeEqual(a:string,b:string){const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);}
 function requireAdmin(req:Request,res:Response,next:NextFunction){
