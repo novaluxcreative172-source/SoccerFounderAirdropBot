@@ -137,7 +137,6 @@ bot.on("photo",async ctx=>{
   const currentTask=tasks.find(t=>t.type===TASK_FLOW[current].type);
   const currentSubmission=currentTask?subs.find(s=>s.taskId===currentTask.id):null;
   if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId)){
-   const savedPhotoId=(currentSubmission.details as {photoFileId:string}).photoFileId;
    console.log("[SCREENSHOT] Pending evidence found; retrying notification. Submission:",currentSubmission.id,"Task:",current+1);
    try{
     const delivered=await notifyAdminReview("📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
