@@ -31,14 +31,15 @@ async function showCurrentTask(ctx:any){
  const next=TASK_FLOW.findIndex(item=>{
   const task=tasks.find(t=>t.type===item.type);
   const sub=task?submissions.find(s=>s.taskId===task.id):null;
-  return !task||!sub||sub.status==="REJECTED";
+  return !task||!sub||sub.status!=="APPROVED";
  });
- if(next===-1)return ctx.reply("🎉 All six tasks have been submitted! Any pending submissions are under admin review. Approved rewards will appear in My wallet.");
+ if(next===-1)return ctx.reply("🎉 All six tasks have been approved! Your approved task rewards are available in My wallet.");
  const item=TASK_FLOW[next],task=tasks.find(t=>t.type===item.type);
  if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
  const previous=submissions.find(s=>s.taskId===task.id);
- const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. Please review the instructions and submit again.":"";
- return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence and continue.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
+ if(previous?.status==="PENDING")return ctx.reply("⏳ Your evidence for Task "+(next+1)+" has been received and is awaiting admin review. The next task unlocks only after the admin approves this task.");
+ const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. "+(previous.reviewNote||"Please review the instructions and submit new evidence."):"";
+ return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence. The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
 bot.start(async ctx=>{
  await userFor(ctx);
@@ -54,8 +55,11 @@ for(let n=1;n<=6;n++){
   const user=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
   if(!user)return ctx.reply("Please use /start first.");
   const [tasks,subs]=await Promise.all([prisma.task.findMany({where:{active:true}}),prisma.taskSubmission.findMany({where:{userId:user.id}})]);
-  const current=TASK_FLOW.findIndex(item=>{const t=tasks.find(x=>x.type===item.type);const s=t?subs.find(x=>x.taskId===t.id):null;return !t||!s||s.status==="REJECTED";});
+  const current=TASK_FLOW.findIndex(item=>{const t=tasks.find(x=>x.type===item.type);const s=t?subs.find(x=>x.taskId===t.id):null;return !t||!s||s.status!=="APPROVED";});
   if(current!==n-1)return showCurrentTask(ctx);
+  const currentTask=tasks.find(x=>x.type===TASK_FLOW[n-1].type);
+  const currentSubmission=currentTask?subs.find(x=>x.taskId===currentTask.id):null;
+  if(currentSubmission?.status==="PENDING")return ctx.reply("Your evidence is already awaiting admin review. Please wait for approval before continuing.");
   taskEvidenceDrafts.set(String(ctx.from.id),n);
   return ctx.reply("Great! Send your evidence for Task "+n+" now. You can send a written explanation or a screenshot. Your submission will be sent to the admin for review. Send /cancel to stop.");
  });
@@ -68,10 +72,12 @@ bot.on("photo",async ctx=>{
  const task=await prisma.task.findUnique({where:{type:item.type as any}});
  if(!task)return ctx.reply("This task is not configured yet.");
  const photo=ctx.message.photo[ctx.message.photo.length-1],caption=ctx.message.caption||"";
- await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
+ const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
- await ctx.reply("✅ Evidence submitted for Task "+n+". It is pending admin review. You can continue to the next task.");
- await showCurrentTask(ctx);
+ await ctx.reply("✅ Screenshot received for Task "+n+". It is now awaiting admin review. Task "+(n+1)+" will unlock only after approval.");
+ const adminIds=(config.ADMIN_IDS||"").split(",").map(x=>x.trim()).filter(Boolean);
+ for(const adminId of adminIds){try{await bot.telegram.sendPhoto(Number(adminId),photo.file_id,{caption:"📥 NEW TASK EVIDENCE\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\n"+(caption?"Details: "+caption:"No caption provided.")});}catch(e){console.error("Admin task screenshot notification failed for "+adminId,e);}}
+
 });
 bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaign one task at a time. Open the current task, press DONE, then send your evidence when prompted."));
 bot.action("wallet",async ctx=>{
@@ -128,10 +134,12 @@ bot.on("text",async(ctx:any,next:any)=>{
   if(!u)return ctx.reply("Please use /start first.");
   const task=await prisma.task.findUnique({where:{type:item.type as any}});
   if(!task)return ctx.reply("This task is not configured yet.");
-  await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:answer}},update:{details:{text:answer},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
+  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:answer}},update:{details:{text:answer},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
   taskEvidenceDrafts.delete(key);
-  await ctx.reply("✅ Evidence submitted for Task "+n+". It is pending admin review. You can continue to the next task.");
-  return showCurrentTask(ctx);
+  await ctx.reply("✅ Evidence received for Task "+n+". It is awaiting admin review. The next task unlocks only after approval.");
+  const adminIds=(config.ADMIN_IDS||"").split(",").map(x=>x.trim()).filter(Boolean);
+  for(const adminId of adminIds){try{await bot.telegram.sendMessage(Number(adminId),"📥 NEW TASK SUBMISSION\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\nEvidence: "+answer);}catch(e){console.error("Admin task notification failed for "+adminId,e);}}
+  return;
  }
  return next();
 });
