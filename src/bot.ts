@@ -37,7 +37,7 @@ async function showCurrentTask(ctx:any){
  const item=TASK_FLOW[next],task=tasks.find(t=>t.type===item.type);
  if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
  const previous=submissions.find(s=>s.taskId===task.id);
- if(previous?.status==="PENDING")return ctx.reply("⏳ Your evidence for Task "+(next+1)+" has been received and is awaiting admin review. The next task unlocks only after the admin approves this task.");
+ if(previous?.status==="PENDING")return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: EVIDENCE RECEIVED — WAITING FOR ADMIN REVIEW.\\n\\nYou have already submitted this task. There is nothing else to submit right now. Once the admin approves it, the bot will unlock and send you the next task. You can check back by tapping My tasks.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","tasks")]]));
  const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. "+(previous.reviewNote||"Please review the instructions and submit new evidence."):"";
  return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence. The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
