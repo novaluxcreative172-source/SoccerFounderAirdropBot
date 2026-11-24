@@ -39,7 +39,8 @@ async function showCurrentTask(ctx:any){
  const item=TASK_FLOW[next],task=tasks.find(t=>t.type===item.type);
  if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
  const previous=submissions.find(s=>s.taskId===task.id);
- if(previous?.status==="PENDING")return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: UNDER REVIEW — YOUR SCREENSHOT HAS BEEN RECEIVED.\\n\\nPlease wait for the admin decision. Press Check task status to refresh.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","task_status")]]));
+ const previousDetails=previous?.details as {photoFileId?:string}|null;
+ if(previous?.status==="PENDING"&&previousDetails?.photoFileId)return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: UNDER REVIEW — YOUR screenshot is with the admin team.\\n\\nPlease wait for the admin decision.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","task_status")]]));
  const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. "+(previous.reviewNote||"Please review the instructions and submit new evidence."):"";
  return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence. The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
@@ -53,22 +54,37 @@ bot.start(async ctx=>{
 bot.action("tasks",async ctx=>{await ctx.answerCbQuery();await showCurrentTask(ctx);});
 bot.action("task_status",async ctx=>{
  await ctx.answerCbQuery();
- const user=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
+ const user=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!user)return ctx.reply("Please use /start first.");
- const rows=await prisma.taskSubmission.findMany({where:{userId:user.id},include:{task:true},orderBy:{reviewedAt:"desc"}});
- const pending=rows.find(row=>row.status==="PENDING");
- if(pending){
-  const index=TASK_FLOW.findIndex(item=>item.type===pending.task.type);
-  return ctx.reply("⏳ TASK "+(index+1)+" OF 6 — UNDER REVIEW\n"+pending.task.title+"\nReward pending approval: "+fmt(pending.task.rewardKobo)+"\n\nYour screenshot has been received and is waiting for admin review. No reward is credited until approval.");
- }
- const latestApproved=rows.find(row=>row.status==="APPROVED");
- if(latestApproved){
-  const index=TASK_FLOW.findIndex(item=>item.type===latestApproved.task.type);
-  await ctx.reply("✅ TASK "+(index+1)+" COMPLETED\n"+latestApproved.task.title+"\n💰 Reward earned: "+fmt(latestApproved.task.rewardKobo)+"\n\nYour reward has been credited to My wallet.");
- }else{
-  await ctx.reply("No task has been approved yet. Open My tasks to begin and submit your screenshot evidence.");
- }
- return showCurrentTask(ctx);
+ const [submissions,referrals,withdrawals,referralTransactions]=await Promise.all([
+  prisma.taskSubmission.findMany({where:{userId:user.id},include:{task:true}}),
+  prisma.user.findMany({where:{referredById:user.id},select:{id:true,submissions:{where:{status:"APPROVED"},select:{task:{select:{type:true}}}}}}),
+  prisma.withdrawal.findMany({where:{userId:user.id},orderBy:{createdAt:"desc"},take:5}),
+  prisma.walletTransaction.findMany({where:{userId:user.id,type:"REFERRAL_REWARD"},select:{amountKobo:true}})
+ ]);
+ const taskLines=TASK_FLOW.map((item,index)=>{
+  const submission=submissions.find(row=>row.task.type===item.type);
+  const evidence=submission?.details as {photoFileId?:string}|null;
+  if(!submission||!evidence?.photoFileId)return (index+1)+". "+item.title+" — NOT SUBMITTED";
+  if(submission.status==="PENDING")return (index+1)+". "+item.title+" — UNDER REVIEW (screenshot received). Pending reward: "+fmt(submission.task.rewardKobo);
+  if(submission.status==="REJECTED")return (index+1)+". "+item.title+" — REJECTED. "+(submission.reviewNote||"Please submit new screenshot evidence.");
+  if(submission.status==="APPROVED"&&submission.rewardCredited)return (index+1)+". "+item.title+" — COMPLETED. Earned: "+fmt(submission.task.rewardKobo);
+  if(submission.status==="APPROVED")return (index+1)+". "+item.title+" — APPROVED. Reward credit is being checked; contact support if it does not appear in your wallet.";
+  return (index+1)+". "+item.title+" — NOT SUBMITTED";
+ });
+ const completed=taskLines.filter(line=>line.includes(" — COMPLETED.")).length;
+ const pending=taskLines.filter(line=>line.includes(" — UNDER REVIEW")).length;
+ const pendingTaskValue=submissions.filter(row=>row.status==="PENDING"&&Boolean((row.details as {photoFileId?:string}|null)?.photoFileId)).reduce((sum,row)=>sum+row.task.rewardKobo,0);
+ const approvedTaskValue=submissions.filter(row=>row.status==="APPROVED"&&row.rewardCredited).reduce((sum,row)=>sum+row.task.rewardKobo,0);
+ const fullyCompletedReferrals=referrals.filter(ref=>{
+  const types=new Set(ref.submissions.map(s=>s.task.type));
+  return TASK_FLOW.every(task=>types.has(task.type));
+ }).length;
+ const referralEarned=referralTransactions.reduce((sum,row)=>sum+row.amountKobo,0);
+ const withdrawalLines=withdrawals.length?withdrawals.map(w=>"• "+fmt(w.amountKobo)+" — "+w.status+(w.adminNote?" ("+w.adminNote+")":"")).join("\\n"):"No withdrawal requests yet.";
+ const wallet=user.wallet;
+ const report="📊 YOUR SOCCERFOUNDER ACCOUNT STATUS\\n\\nTASK PROGRESS ("+completed+"/6 completed)\\n"+taskLines.join("\\n")+"\\n\\nTask rewards earned: "+fmt(approvedTaskValue)+"\\nTask rewards awaiting review: "+fmt(pendingTaskValue)+" ("+pending+" submission"+(pending===1?"":"s")+")\\n\\nREFERRALS\\nPeople invited: "+referrals.length+"\\nReferrals who completed all six approved tasks: "+fullyCompletedReferrals+"\\nReferral rewards credited: "+fmt(referralEarned)+"\\nReferral reward: ₦100 per eligible completed referral\\n\\nWALLET\\nAvailable: "+fmt(wallet?.availableKobo||0)+"\\nPending withdrawal: "+fmt(wallet?.pendingKobo||0)+"\\nTotal earned: "+fmt(wallet?.totalEarnedKobo||0)+"\\nWithdrawn: "+fmt(wallet?.withdrawnKobo||0)+"\\nMinimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\\n\\nWITHDRAWAL HISTORY\\n"+withdrawalLines+"\\n\\nThis report reflects the records currently saved in your account.";
+ return ctx.reply(report,Markup.inlineKeyboard([[Markup.button.callback("🔄 Refresh status","task_status")],[Markup.button.callback("📝 Open my tasks","tasks")],[Markup.button.callback("💰 My wallet","wallet")]]));
 });
 for(let n=1;n<=6;n++){
  bot.action("task_done_"+n,async ctx=>{
