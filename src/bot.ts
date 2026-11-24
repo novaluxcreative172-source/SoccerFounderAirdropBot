@@ -36,6 +36,27 @@ bot.action("tasks",async ctx=>{
  const body=rows.map((task,i)=>(i+1)+". "+task.title+" — "+fmt(task.rewardKobo)+"\n"+(descriptions[i]||task.description));
  await ctx.reply("YOUR SIX CAMPAIGN TASKS\n\n"+body.join("\n\n")+"\n\nTOTAL TASK REWARDS: ₦800\n\nSubmit evidence with /submit TASK_NUMBER your details. Every task is subject to admin approval. Your ₦100 referral reward is paid only after the person you referred has all six tasks approved.");
 });
+bot.on("photo",async ctx=>{
+ const caption=ctx.message.caption||"";
+ const match=caption.match(/^\\/submit(?:@\\w+)?\\s+(\\d+)\\s*(.*)$/i);
+ if(!match)return ctx.reply("To submit a screenshot, add a caption in this format: /submit 5 I have joined the support group.");
+ const n=Number(match[1]);
+ const types=["WEBSITE_REGISTRATION","SUPER_ONE_REGISTRATION","SPONSOR_CONFIRMATION","COACH_BOT_COMPLETION","SUPPORT_GROUP_JOIN","FOOTBALL_ENGAGEMENT"];
+ if(!Number.isInteger(n)||n<1||n>6)return ctx.reply("Please use a task number from 1 to 6 in your photo caption.");
+ const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
+ if(!u)return ctx.reply("Please use /start first.");
+ const task=await prisma.task.findUnique({where:{type:types[n-1] as any}});
+ if(!task)return ctx.reply("Campaign tasks are not yet configured.");
+ const existing=await prisma.taskSubmission.findUnique({where:{userId_taskId:{userId:u.id,taskId:task.id}}});
+ if(existing?.status==="APPROVED")return ctx.reply("This task has already been approved. It cannot be submitted again.");
+ const photo=ctx.message.photo[ctx.message.photo.length-1];
+ await prisma.taskSubmission.upsert({
+  where:{userId_taskId:{userId:u.id,taskId:task.id}},
+  create:{userId:u.id,taskId:task.id,details:{text:match[2]||caption,photoFileId:photo.file_id}},
+  update:{details:{text:match[2]||caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}
+ });
+ await ctx.reply("Screenshot received for "+task.title+". Your submission is pending admin review. Reward if approved: "+fmt(task.rewardKobo)+".");
+});
 bot.command("submit",async ctx=>{
  const bits=ctx.message.text.split(" "); const n=Number(bits[1]);
  const types=["WEBSITE_REGISTRATION","SUPER_ONE_REGISTRATION","SPONSOR_CONFIRMATION","COACH_BOT_COMPLETION","SUPPORT_GROUP_JOIN","FOOTBALL_ENGAGEMENT"];
