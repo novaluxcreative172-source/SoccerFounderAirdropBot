@@ -84,6 +84,7 @@ app.post("/api/admin/withdrawals/:id/paid",requireAdmin,async(req,res)=>{
    if(!w)throw new Error("NOT_FOUND");
    if(w.status==="PAID")throw new Error("ALREADY_PAID");
    if(w.status==="REJECTED")throw new Error("ALREADY_REJECTED");
+   if(w.status==="CANCELLED")throw new Error("ALREADY_CANCELLED");
    const updated=await tx.withdrawal.updateMany({where:{id,status:{in:["PENDING","APPROVED"]}},data:{status:"PAID",paymentReference:paymentReference||null,adminNote:adminNote||"Payment manually confirmed by admin"}});
    if(updated.count!==1)throw new Error("STATUS_CHANGED");
    await tx.wallet.update({where:{userId:w.userId},data:{pendingKobo:{decrement:w.amountKobo},withdrawnKobo:{increment:w.amountKobo}}});
@@ -92,7 +93,7 @@ app.post("/api/admin/withdrawals/:id/paid",requireAdmin,async(req,res)=>{
   });
   try{await bot.telegram.sendMessage(Number(result.user.telegramId),"✅ Your withdrawal has been marked PAID.\nAmount: ₦"+(result.amountKobo/100).toLocaleString("en-NG",{minimumFractionDigits:2})+"\nBank: "+result.bankName+(paymentReference?"\nPayment reference: "+paymentReference:""));}catch(e){console.error("Paid notification failed",e);}
   res.json({ok:true});
- }catch(e:any){const map:any={NOT_FOUND:404,ALREADY_PAID:409,ALREADY_REJECTED:409,STATUS_CHANGED:409};res.status(map[e.message]||500).json({error:map[e.message]?e.message:"Could not confirm payment"});}
+ }catch(e:any){const map:any={NOT_FOUND:404,ALREADY_PAID:409,ALREADY_REJECTED:409,ALREADY_CANCELLED:409,STATUS_CHANGED:409};res.status(map[e.message]||500).json({error:map[e.message]?e.message:"Could not confirm payment"});}
 });
 app.post("/api/admin/withdrawals/:id/reject",requireAdmin,async(req,res)=>{
  const id=String(req.params.id);const note=String(req.body?.note||"").trim().slice(0,500);
