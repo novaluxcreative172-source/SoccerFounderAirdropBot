@@ -220,9 +220,35 @@ bot.on("text",async(ctx:any,next:any)=>{
  return next();
 });
 bot.action("referral",async ctx=>{
- await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
+ await ctx.answerCbQuery();
+ const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
  if(!u)return ctx.reply("Please use /start first.");
- await ctx.reply("Your personal referral link:\nhttps://t.me/"+config.BOT_USERNAME+"?start="+u.referralCode+"\n\nEarn ₦100 for each person you refer after they complete and receive approval for all six campaign tasks. One-level referrals only. Self-referrals and duplicate referrals do not qualify.");
+ const [referrals,rewardTransactions]=await Promise.all([
+  prisma.user.findMany({where:{referredById:u.id},include:{submissions:{include:{task:true}}},orderBy:{createdAt:"asc"}}),
+  prisma.walletTransaction.findMany({where:{userId:u.id,type:"REFERRAL_REWARD"},select:{amountKobo:true}})
+ ]);
+ const taskProgress=referrals.map(ref=>{
+  const approved=new Set(ref.submissions.filter(sub=>sub.status==="APPROVED").map(sub=>sub.task.type));
+  const pending=ref.submissions.filter(sub=>sub.status==="PENDING"&&Boolean((sub.details as {photoFileId?:string}|null)?.photoFileId)).length;
+  return {ref,approved:approved.size,pending,complete:TASK_FLOW.every(task=>approved.has(task.type))};
+ });
+ const completed=taskProgress.filter(row=>row.complete).length;
+ const active=taskProgress.filter(row=>row.approved>0&&!row.complete).length;
+ const pendingReviews=taskProgress.reduce((sum,row)=>sum+row.pending,0);
+ const rewardEarned=rewardTransactions.reduce((sum,row)=>sum+row.amountKobo,0);
+ const lines=taskProgress.slice(0,15).map((row,index)=>{
+  const name=[row.ref.firstName,row.ref.lastName].filter(Boolean).join(" ")||"Participant";
+  const username=row.ref.username?" @"+row.ref.username:"";
+  const state=row.complete?(row.ref.referralRewardCredited?"✅ COMPLETED — ₦100 reward credited":"🎉 COMPLETED — reward processing"):(row.approved>0?"🔄 IN PROGRESS":"🆕 JUST JOINED");
+  return (index+1)+". "+name+username+"\n   Tasks approved: "+row.approved+"/6"+(row.pending?" | Under review: "+row.pending:"")+"\n   "+state;
+ });
+ const link="https://t.me/"+config.BOT_USERNAME+"?start="+u.referralCode;
+ const report="👥 YOUR REFERRAL DASHBOARD\n\n🔗 Your personal invite link:\n"+link+"\n\n📊 REFERRAL SUMMARY\n• People invited: "+referrals.length+"\n• Started/completed at least one task: "+active+"\n• Tasks awaiting admin review: "+pendingReviews+"\n• Fully completed referrals: "+completed+"\n• Referral rewards earned: "+fmt(rewardEarned)+"\n• Reward per eligible referral: ₦100\n\n📋 REFERRAL ACTIVITY\n"+(lines.length?lines.join("\n\n"):"No referrals yet. Share your personal link to invite participants.")+(referrals.length>15?"\n\nShowing the first 15 referrals. Your totals include everyone.":"")+"\n\n🎁 You earn ₦100 when a person you invited gets all six tasks approved. Task submissions are counted only after admin approval. Referral rewards are credited once per eligible participant. Self-referrals and duplicate referrals do not qualify.";
+ return ctx.reply(report,Markup.inlineKeyboard([
+  [Markup.button.url("🔗 Share invite link",link)],
+  [Markup.button.callback("🔄 Refresh referral dashboard","referral")],
+  [Markup.button.callback("💰 My wallet","wallet")]
+ ]));
 });
 bot.command("tasks",ctx=>ctx.reply("Tap My tasks from /start."));
 bot.command("wallet",async ctx=>{
@@ -239,6 +265,22 @@ registerAdminReviewHandler(async (submissionId, approved, adminId) => {
   ? "✅ Your task was approved.\nTask: "+existing.task.title+"\nReward credited: "+fmt(existing.task.rewardKobo)+"\n\nOpen My tasks or press Check task status to see your completed task and continue."
   : "❌ Your task was not approved.\nTask: "+existing.task.title+"\nPlease review the task instructions and submit a new screenshot.";
  try { await bot.telegram.sendMessage(Number(existing.user.telegramId),message); } catch (error) { console.error("Participant task review notification failed:",error); }
+ if(approved&&existing.user.referredById){
+  try{
+   const [referrer,referred]=await Promise.all([
+    prisma.user.findUnique({where:{id:existing.user.referredById},select:{telegramId:true}}),
+    prisma.user.findUnique({where:{id:existing.user.id},include:{submissions:{where:{status:"APPROVED"},include:{task:{select:{type:true}}}}}})
+   ]);
+   if(referrer&&referred){
+    const approvedTypes=new Set(referred.submissions.map(row=>row.task.type));
+    const progress=TASK_FLOW.filter(task=>approvedTypes.has(task.type)).length;
+    const completedReferral=TASK_FLOW.every(task=>approvedTypes.has(task.type));
+    const bonusCredited=referred.referralRewardCredited;
+    const referralMessage="🎉 YOUR REFERRAL MADE PROGRESS!\n\n"+(existing.user.firstName||"A participant you invited")+" has received admin approval for a task.\n\n✅ Approved task: "+existing.task.title+"\n📊 Referral progress: "+progress+"/6 tasks approved"+(completedReferral?"\n\n🏆 ALL SIX TASKS COMPLETED! Your ₦100 referral reward "+(bonusCredited?"has been credited to your wallet.":"is being processed."):"\n\nYou will earn ₦100 when all six tasks have been approved.\n\nOpen Invite friends to view your updated referral dashboard.");
+    await bot.telegram.sendMessage(Number(referrer.telegramId),referralMessage);
+   }
+  }catch(error){console.error("Referrer task progress notification failed:",error);}
+ }
  return approved ? "Reward credited: "+fmt(existing.task.rewardKobo) : "Participant can resubmit.";
 });
 bot.catch((err)=>console.error("Bot error",err));
