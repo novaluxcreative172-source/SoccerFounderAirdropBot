@@ -31,6 +31,19 @@ app.get("/api/admin/submissions",requireAdmin,async(req,res)=>{
  });
  res.json(rows);
 });
+app.get("/api/admin/submissions/:id/photo",requireAdmin,async(req,res)=>{
+ const row=await prisma.taskSubmission.findUnique({where:{id:String(req.params.id)},select:{details:true}});
+ const details=row?.details as {photoFileId?:string}|null;
+ if(!details?.photoFileId)return res.status(404).json({error:"No screenshot attached"});
+ try{
+  const fileUrl=await bot.telegram.getFileLink(details.photoFileId);
+  const upstream=await fetch(fileUrl.href);
+  if(!upstream.ok)return res.status(502).json({error:"Could not retrieve screenshot from Telegram"});
+  res.setHeader("Content-Type",upstream.headers.get("content-type")||"image/jpeg");
+  res.setHeader("Cache-Control","private, no-store");
+  res.send(Buffer.from(await upstream.arrayBuffer()));
+ }catch(e){console.error("Screenshot retrieval failed",e);res.status(502).json({error:"Could not retrieve screenshot"});}
+});
 app.post("/api/admin/submissions/:id/review",requireAdmin,async(req,res)=>{
  const id=String(req.params.id);
  const approved=req.body?.approved===true;
