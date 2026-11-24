@@ -139,13 +139,9 @@ async function main(){
   app.use(bot.webhookCallback(webhookPath));
   const expectedWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath;
   startTelegram=async()=>{
-   const current=await bot.telegram.getWebhookInfo();
-   if(current.url===expectedWebhookUrl){
-    console.log("Telegram webhook is already registered correctly; skipping setWebhook.");
-    return;
-   }
-   console.log("Telegram webhook URL differs from the configured URL; registering the expected webhook.");
+   console.log("Registering Telegram webhook directly; skipping getWebhookInfo to avoid the currently rate-limited API call.");
    await bot.telegram.setWebhook(expectedWebhookUrl,{secret_token:config.WEBHOOK_SECRET});
+   console.log("Telegram webhook registration succeeded.");
   };
  }else{
   console.warn("Telegram startup mode: POLLING. Webhook mode was not selected. WEBHOOK_DOMAIN present: "+Boolean(config.WEBHOOK_DOMAIN)+"; NODE_ENV: "+config.NODE_ENV+".");
