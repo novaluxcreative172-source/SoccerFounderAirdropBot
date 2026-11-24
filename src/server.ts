@@ -138,7 +138,15 @@ async function main(){
   if(!config.WEBHOOK_SECRET)throw new Error("WEBHOOK_SECRET is required when webhook mode is enabled.");
   const webhookPath="/telegram/"+config.WEBHOOK_SECRET;
   app.use(bot.webhookCallback(webhookPath));
+
+  // Give the separate admin notification bot its own webhook endpoint too.
+  // This avoids Telegram getUpdates polling conflicts when Render has more
+  // than one process or an old instance is still shutting down.
+  const adminWebhookPath="/telegram-admin/"+config.WEBHOOK_SECRET;
+  if(adminNotificationBot) app.use(adminNotificationBot.webhookCallback(adminWebhookPath));
+
   const expectedWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath;
+  const expectedAdminWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+adminWebhookPath;
   startTelegram=async()=>{
    console.log("Registering Telegram webhook directly; skipping getWebhookInfo to avoid the currently rate-limited API call.");
    await bot.telegram.setWebhook(expectedWebhookUrl,{secret_token:config.WEBHOOK_SECRET});
@@ -153,12 +161,19 @@ async function main(){
  if(notificationBot){
   console.log("ADMIN_NOTIFICATION_BOT_TOKEN is present. Verifying the separate admin notification bot with Telegram...");
   void notificationBot.telegram.getMe().then(async identity=>{
-   console.log("Admin notification bot token is valid for @"+identity.username+". Starting its Telegram polling listener...");
+   console.log("Admin notification bot token is valid for @"+identity.username+".");
    try{
-    await launchTelegramWithRateLimitRetry(()=>notificationBot.launch());
-    console.log("Admin notification bot connected successfully as @"+identity.username+".");
+    if(config.WEBHOOK_DOMAIN && config.NODE_ENV==="production"){
+     console.log("Registering admin notification webhook; polling is disabled in production to prevent getUpdates conflicts.");
+     await notificationBot.telegram.setWebhook(expectedAdminWebhookUrl,{secret_token:config.WEBHOOK_SECRET});
+     console.log("Admin notification webhook registration succeeded for @"+identity.username+".");
+    }else{
+     console.log("Starting admin notification bot polling listener in non-production mode...");
+     await launchTelegramWithRateLimitRetry(()=>notificationBot.launch());
+     console.log("Admin notification bot connected successfully as @"+identity.username+".");
+    }
    }catch(error){
-    console.error("Admin notification bot polling startup failed for @"+identity.username+":",error);
+    console.error("Admin notification bot startup failed for @"+identity.username+":",error);
    }
   }).catch(error=>{
    console.error("Admin notification bot token verification failed. Check that ADMIN_NOTIFICATION_BOT_TOKEN is the token for the separate notification bot:",error);
