@@ -2,6 +2,7 @@ import {Telegraf,Markup} from "telegraf";
 import {randomBytes} from "node:crypto";
 import {prisma} from "./db";
 import {config} from "./config";
+import {notifyAdminPhoto,notifyAdminText} from "./notificationBot";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
 const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
 async function userFor(ctx:any){
@@ -75,8 +76,7 @@ bot.on("photo",async ctx=>{
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
  await ctx.reply("✅ Screenshot received for Task "+n+". It is now awaiting admin review. Task "+(n+1)+" will unlock only after approval.");
- const adminIds=(config.ADMIN_IDS||"").split(",").map(x=>x.trim()).filter(Boolean);
- for(const adminId of adminIds){try{await bot.telegram.sendPhoto(Number(adminId),photo.file_id,{caption:"📥 NEW TASK EVIDENCE\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\n"+(caption?"Details: "+caption:"No caption provided.")});}catch(e){console.error("Admin task screenshot notification failed for "+adminId,e);}}
+ await notifyAdminPhoto(photo.file_id,"📥 NEW TASK EVIDENCE\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\n"+(caption?"Details: "+caption:"No caption provided."));
 
 });
 bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaign one task at a time. Open the current task, press DONE, then send your evidence when prompted."));
@@ -132,8 +132,7 @@ bot.action("withdraw_confirm",async ctx=>{
   });
   withdrawalDrafts.delete(key);
   await ctx.reply("✅ WITHDRAWAL REQUEST SUBMITTED\n\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\n\nYour funds have been reserved. The admin will review and process your payment. You will receive a Telegram notification when it is marked PAID.\nReference: "+withdrawal.id);
-  const adminIds=(config.ADMIN_IDS||"").split(",").map(x=>x.trim()).filter(Boolean);
-  for(const adminId of adminIds){try{await bot.telegram.sendMessage(Number(adminId),"💸 NEW WITHDRAWAL REQUEST\nParticipant: "+(user.firstName||"")+" "+(user.lastName||"")+" (@"+(user.username||"no username")+")\nTelegram ID: "+user.telegramId+"\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\nWithdrawal ID: "+withdrawal.id+"\n\nReview in the admin dashboard. After manually transferring the funds, click Confirm Paid to notify the participant.");}catch(e){console.error("Admin withdrawal notification failed for "+adminId,e);}}
+  await notifyAdminText("💸 NEW WITHDRAWAL REQUEST\nParticipant: "+(user.firstName||"")+" "+(user.lastName||"")+" (@"+(user.username||"no username")+")\nTelegram ID: "+user.telegramId+"\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\nWithdrawal ID: "+withdrawal.id+"\n\nReview in the admin dashboard. After manually transferring the funds, click Confirm Paid to notify the participant.");
  }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
 });
 bot.on("text",async(ctx:any,next:any)=>{
