@@ -138,6 +138,13 @@ async function main(){
   console.log("Telegram startup mode: WEBHOOK. WEBHOOK_DOMAIN is set and NODE_ENV is production. WEBHOOK_SECRET present: "+Boolean(config.WEBHOOK_SECRET)+".");
   if(!config.WEBHOOK_SECRET)throw new Error("WEBHOOK_SECRET is required when webhook mode is enabled.");
   const webhookPath="/telegram/"+config.WEBHOOK_SECRET;
+  app.use(webhookPath,(req:Request,_res:Response,next:NextFunction)=>{
+   const update=req.body||{};
+   const message=update.message||update.edited_message;
+   const command=typeof message?.text==="string"&&message.text.startsWith("/")?message.text.split(" ")[0]:"non-command update";
+   console.log("[WEBHOOK] Main bot update received. Update ID:",String(update.update_id??"unknown"),"Type:",command);
+   next();
+  });
   app.use(bot.webhookCallback(webhookPath));
 
   // Give the separate admin notification bot its own webhook endpoint too.
