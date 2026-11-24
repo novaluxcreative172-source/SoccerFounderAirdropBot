@@ -7,7 +7,7 @@ const schema=z.object({
  BOT_USERNAME:z.string().default("SoccerFounderAirdropBot"), WEBSITE_URL:z.string().url().default("https://www.SoccerFounder.com"),
  COACH_BOT_USERNAME:z.string().default("SoccerFounderCoachBot"), SUPPORT_GROUP_ID:z.string().optional(),
  SUPPORT_GROUP_INVITE_URL:z.string().optional(), REQUIRED_SPONSOR:z.string().default("Shane"),
- MIN_WITHDRAWAL_NGN:z.coerce.number().default(1300), ENGAGEMENT_DAYS:z.coerce.number().default(30)
+ MIN_WITHDRAWAL_NGN:z.coerce.number().default(1000), ENGAGEMENT_DAYS:z.coerce.number().default(30)
 });
 export const config=schema.parse(process.env);
 export const adminIds=new Set(config.ADMIN_IDS.split(",").map(x=>x.trim()).filter(Boolean));
