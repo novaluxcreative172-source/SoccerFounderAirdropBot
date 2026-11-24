@@ -14,11 +14,11 @@ async function userFor(ctx:any){
 }
 const TASK_FLOW=[
  {type:"WEBSITE_REGISTRATION",title:"Register on the SoccerFounder Website",description:"1. Visit "+config.WEBSITE_URL+". 2. Register on the website. 3. Download the SoccerFounder app from the website and complete the registration in the app. 4. Take a screenshot showing that your registration is complete, then send the screenshot here. Your evidence for this task must be a screenshot of your completed registration. Do not type your name, email or phone number in the chat.",rewardKobo:10000},
- {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Submit your username and Super One ID as evidence.",rewardKobo:10000},
- {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"Your sponsor/team leader must be Shane. Confirm the sponsor name and submit it for verification.",rewardKobo:10000},
- {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"Open @"+config.COACH_BOT_USERNAME+" and complete all six onboarding steps. Submit confirmation or a screenshot.",rewardKobo:10000},
- {type:"SUPPORT_GROUP_JOIN",title:"Join the Support Group",description:"Join the SoccerFounder Support Group: "+(config.SUPPORT_GROUP_INVITE_URL||"use the campaign support group invite")+". Submit a screenshot as evidence.",rewardKobo:10000},
- {type:"FOOTBALL_ENGAGEMENT",title:"30-Day Football Engagement",description:"Complete 30 days of genuine football engagement and submit your evidence.",rewardKobo:30000}
+ {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Take a clear screenshot showing your completed registration or Super One ID in the app, then upload that screenshot here. Do not send your password, OTP or other login security details.",rewardKobo:10000},
+ {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"Your sponsor/team leader must be Shane. Take a screenshot showing Shane as your sponsor/team leader in the relevant account screen, then upload it here. Hide unrelated personal information where possible.",rewardKobo:10000},
+ {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"Open @"+config.COACH_BOT_USERNAME+" and complete all six onboarding steps. Take a screenshot showing the completed steps or completion confirmation, then upload it here.",rewardKobo:10000},
+ {type:"SUPPORT_GROUP_JOIN",title:"Join the Support Group",description:"Join the SoccerFounder Support Group: "+(config.SUPPORT_GROUP_INVITE_URL||"use the campaign support group invite")+". Take a screenshot showing that you have joined the group, then upload it here.",rewardKobo:10000},
+ {type:"FOOTBALL_ENGAGEMENT",title:"30-Day Football Engagement",description:"Complete 30 days of genuine football engagement. When the 30 days are complete, upload screenshots showing your participation across the period. The admin will review the evidence.",rewardKobo:30000}
 ] as const;
 const taskEvidenceDrafts=new Map<string,number>();
 async function showCurrentTask(ctx:any){
@@ -61,7 +61,7 @@ for(let n=1;n<=6;n++){
   const currentSubmission=currentTask?subs.find(x=>x.taskId===currentTask.id):null;
   if(currentSubmission?.status==="PENDING")return ctx.reply("Your evidence is already awaiting admin review. Please wait for approval before continuing.");
   taskEvidenceDrafts.set(String(ctx.from.id),n);
-  return ctx.reply("Great! Send your evidence for Task "+n+" now. You can send a written explanation or a screenshot. Your submission will be sent to the admin for review. Send /cancel to stop.");
+  return ctx.reply("📸 Please upload a screenshot proving that you completed Task "+n+". Screenshots are required for review. You may add a short caption, but do not send passwords, OTPs or login details. Send /cancel to stop.");
  });
 }
 bot.on("photo",async ctx=>{
@@ -141,7 +141,7 @@ bot.on("text",async(ctx:any,next:any)=>{
  if(n){
   const answer=ctx.message.text.trim();
   if(answer.startsWith("/"))return next();
-  if(answer.length<3)return ctx.reply("Please provide a little more detail about your completed task, or send a screenshot.");
+  return ctx.reply("📸 A screenshot is required for this task. Please upload a screenshot using the photo attachment button. You may add a short caption, but text alone cannot be submitted as proof.");
   const item=TASK_FLOW[n-1],u=await prisma.user.findUnique({where:{telegramId:key}});
   if(!u)return ctx.reply("Please use /start first.");
   const task=await prisma.task.findUnique({where:{type:item.type as any}});
