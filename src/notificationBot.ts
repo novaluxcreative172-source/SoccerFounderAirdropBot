@@ -12,7 +12,7 @@ if (adminNotificationBot) {
     if (!adminIds.includes(String(ctx.from.id))) {
       return ctx.reply("This bot is for authorized campaign administrators only.");
     }
-    return ctx.reply("✅ SoccerFounder admin notifications are connected. You will receive task screenshots and withdrawal alerts here.");
+    return ctx.reply("✅ ADMIN NOTIFICATIONS CONNECTED\n\nYou will receive:\n• New task screenshots\n• Participant details\n• Withdrawal alerts\n\nUse the Approve or Reject buttons to review task evidence.");
   });
   adminNotificationBot.catch(error => console.error("Admin notification bot error:", error));
 }
@@ -47,7 +47,7 @@ export function registerAdminReviewHandler(handler: AdminReviewHandler): void {
       const result = await handler(submissionId, approved, adminId);
       await ctx.answerCbQuery(approved ? "Task approved." : "Task rejected.");
       const oldCaption = ctx.callbackQuery.message && "caption" in ctx.callbackQuery.message ? ctx.callbackQuery.message.caption || "" : "";
-      await ctx.editMessageCaption(oldCaption + "\\n\\n" + (approved ? "✅ APPROVED" : "❌ REJECTED") + "\\n" + result, { reply_markup: { inline_keyboard: [] } });
+      await ctx.editMessageCaption(oldCaption + "\n\n" + (approved ? "✅ APPROVED" : "❌ REJECTED") + "\n" + result, { reply_markup: { inline_keyboard: [] } });
     } catch (error: any) {
       const message = String(error?.message || "");
       await ctx.answerCbQuery(message.includes("already reviewed") ? "This submission was already reviewed." : "Review failed. Check the admin dashboard.", { show_alert: true });
