@@ -112,15 +112,35 @@ app.post("/api/admin/withdrawals/:id/reject",requireAdmin,async(req,res)=>{
   res.json({ok:true});
  }catch(e:any){const map:any={NOT_FOUND:404,ALREADY_PAID:409,ALREADY_REJECTED:409,STATUS_CHANGED:409};res.status(map[e.message]||500).json({error:map[e.message]?e.message:"Could not reject withdrawal"});}
 });
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+async function launchTelegramWithRateLimitRetry(start:()=>Promise<unknown>){
+ for(;;){
+  try{
+   await start();
+   console.log("Telegram bot connected successfully.");
+   return;
+  }catch(error:any){
+   const retryAfter=Number(error?.response?.parameters?.retry_after);
+   if(error?.response?.error_code!==429||!Number.isFinite(retryAfter)||retryAfter<1)throw error;
+   const waitMs=(retryAfter+2)*1000;
+   console.error("Telegram rate limit reached. Keeping the web service online and retrying in "+Math.ceil(waitMs/1000)+" seconds.");
+   await sleep(waitMs);
+  }
+ }
+}
 async function main(){
  await prisma.$connect();
+ let startTelegram:()=>Promise<unknown>;
  if(config.WEBHOOK_DOMAIN && config.NODE_ENV==="production"){
-  const path="/telegram/"+(config.WEBHOOK_SECRET||"replace-this-secret");
-  await bot.telegram.setWebhook(config.WEBHOOK_DOMAIN.replace(/\/$/,"")+path);
-  app.use(bot.webhookCallback(path));
- } else { await bot.launch(); }
+  const webhookPath="/telegram/"+(config.WEBHOOK_SECRET||"replace-this-secret");
+  app.use(bot.webhookCallback(webhookPath));
+  startTelegram=()=>bot.telegram.setWebhook(config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath);
+ }else{
+  startTelegram=()=>bot.launch();
+ }
  app.listen(config.PORT,()=>console.log("Server listening on "+config.PORT));
+ await launchTelegramWithRateLimitRetry(startTelegram);
 }
-main().catch(e=>{console.error(e);process.exit(1);});
+main().catch(e=>{console.error("Application startup failed",e);process.exit(1);});
 process.once("SIGINT",()=>{bot.stop("SIGINT");void prisma.$disconnect();});
 process.once("SIGTERM",()=>{bot.stop("SIGTERM");void prisma.$disconnect();});
