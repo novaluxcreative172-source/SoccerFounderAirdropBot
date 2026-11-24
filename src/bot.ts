@@ -2,7 +2,7 @@ import {Telegraf,Markup} from "telegraf";
 import {randomBytes} from "node:crypto";
 import {prisma} from "./db";
 import {config} from "./config";
-import {notifyAdminPhoto,notifyAdminText,registerAdminReviewHandler} from "./notificationBot";
+import {notifyAdminReview,notifyAdminText,registerAdminReviewHandler} from "./notificationBot";
 import {reviewSubmission} from "./services/review";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
 const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -140,9 +140,8 @@ bot.on("photo",async ctx=>{
    const savedPhotoId=(currentSubmission.details as {photoFileId:string}).photoFileId;
    console.log("[SCREENSHOT] Pending evidence found; retrying notification. Submission:",currentSubmission.id,"Task:",current+1);
    try{
-    const savedPhotoUrl=await ctx.telegram.getFileLink(savedPhotoId);
-    const delivered=await notifyAdminPhoto(savedPhotoUrl.href,"📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
-    if(delivered)return ctx.reply("📸 YOUR SAVED SCREENSHOT WAS FORWARDED\n\n• Task: "+(current+1)+"/6 — "+currentTask!.title+"\n• Status: ⏳ Under review\n\nThe admin team has now received the screenshot. Please wait for a decision.");
+    const delivered=await notifyAdminReview("📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
+    if(delivered)return ctx.reply("✅ Your submission has been received and is awaiting review. Please wait for the decision.");
     // The participant was already informed when the original submission was saved.
     // Do not send another failure message on every photo/retry attempt.
     console.warn("[SCREENSHOT] Retry still not delivered; keeping saved evidence and suppressing duplicate participant alert. Submission:", currentSubmission.id);
@@ -159,12 +158,11 @@ bot.on("photo",async ctx=>{
  const photo=ctx.message.photo[ctx.message.photo.length-1],caption=ctx.message.caption||"";
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
- const photoUrl=await ctx.telegram.getFileLink(photo.file_id);
- const delivered=await notifyAdminPhoto(photoUrl.href,"📩 NEW TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+n+"/6 — "+task.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n🔖 Submission: "+submission.id+"\n\n"+(caption?"Caption: "+caption:"No caption."),submission.id);
+ const delivered=await notifyAdminReview("📩 NEW TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+n+"/6 — "+task.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n🔖 Submission: "+submission.id+"\n\n"+(caption?"Caption: "+caption:"No caption."),submission.id);
  if(delivered){
-  await ctx.reply("📸 SUBMISSION RECEIVED\n\n• Task: "+n+"/6 — "+task.title+"\n• Reward: "+fmt(task.rewardKobo)+"\n• Status: ⏳ Under review\n\nYour screenshot was delivered to the admin team. Please wait for approval.");
+  await ctx.reply("📸 SUBMISSION RECEIVED\n\n• Task: "+n+"/6 — "+task.title+"\n• Reward: "+fmt(task.rewardKobo)+"\n• Status: ⏳ Under review\n\nYour submission has been received and is awaiting review. Please wait for approval.");
  }else{
-  await ctx.reply("⚠️ SCREENSHOT SAVED — ADMIN ALERT FAILED\n\n• Task: "+n+"/6 — "+task.title+"\n• Status: Not yet under review\n\nYour screenshot is saved, but the admin bot did not receive the alert. Please contact support. Do not submit it again.");
+  await ctx.reply("⚠️ SUBMISSION SAVED — REVIEW ALERT FAILED\n\n• Task: "+n+"/6 — "+task.title+"\n• Status: Not yet under review\n\nYour proof is saved, but the review alert could not be sent. Please contact support. Do not submit it again.");
  }
 
 });
