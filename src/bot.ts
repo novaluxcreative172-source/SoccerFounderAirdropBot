@@ -71,33 +71,75 @@ bot.command("submit",async ctx=>{
 bot.action("wallet",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
- const w=u.wallet; await ctx.reply("YOUR REWARDS WALLET\nAvailable: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum withdrawal: ₦"+config.MIN_WITHDRAWAL_NGN.toLocaleString("en-NG")+"\n\nTo request a withdrawal, send:\n/withdraw AMOUNT | ACCOUNT NAME | BANK NAME | 10-DIGIT ACCOUNT NUMBER\nExample: /withdraw 2500 | Ada Okafor | Access Bank | 0123456789\n\nYour available balance is reserved while the request is pending. Payment is manual and only marked Paid after admin confirmation.");
+ const w=u.wallet; await ctx.reply("YOUR REWARDS WALLET\nAvailable: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum withdrawal: ₦"+config.MIN_WITHDRAWAL_NGN.toLocaleString("en-NG")+"\n\nTo withdraw, tap Request withdrawal or send /withdraw. I will ask for your details one question at a time.");
 });
-bot.action("withdraw_help",async ctx=>{
- await ctx.answerCbQuery();
- await ctx.reply("To request a withdrawal, send this command:\n/withdraw AMOUNT | ACCOUNT NAME | BANK NAME | 10-DIGIT ACCOUNT NUMBER\nExample:\n/withdraw 2500 | Ada Okafor | Access Bank | 0123456789\n\nUse your correct Nigerian bank details. Never send your PIN, password or OTP.");
-});
-bot.command("withdraw",async ctx=>{
- const raw=ctx.message.text.replace(/^\/withdraw(?:@\w+)?\s*/i,"");
- const parts=raw.split("|").map((x:string)=>x.trim());
- if(parts.length!==4)return ctx.reply("Please use this exact format:\n/withdraw AMOUNT | ACCOUNT NAME | BANK NAME | 10-DIGIT ACCOUNT NUMBER\nExample: /withdraw 2500 | Ada Okafor | Access Bank | 0123456789");
- const amount=Number(parts[0]);
- if(!Number.isFinite(amount)||!Number.isSafeInteger(Math.round(amount*100))||amount<=0||Math.abs(amount*100-Math.round(amount*100))>0.001)return ctx.reply("Enter a valid amount in naira, up to 2 decimal places.");
- if(parts[1].length<3||parts[1].length>100||parts[2].length<2||parts[2].length>80||!/^\d{10}$/.test(parts[3]))return ctx.reply("Check the account holder name, bank name and 10-digit account number, then try again.");
- const amountKobo=Math.round(amount*100);
- if(amount<config.MIN_WITHDRAWAL_NGN)return ctx.reply("The minimum withdrawal is "+fmt(config.MIN_WITHDRAWAL_NGN*100)+".");
+type WithdrawalDraft = { step: "amount" | "name" | "bank" | "account" | "confirm"; amountKobo?: number; accountName?: string; bankName?: string; accountNumber?: string };
+const withdrawalDrafts = new Map<string, WithdrawalDraft>();
+
+async function askWithdrawalAmount(ctx:any) {
  const user=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!user)return ctx.reply("Please use /start first.");
+ if(!user.wallet)return ctx.reply("Your wallet is not ready yet. Please try again later.");
+ withdrawalDrafts.set(String(ctx.from.id),{step:"amount"});
+ return ctx.reply("🏦 WITHDRAWAL REQUEST\n\nHow much would you like to withdraw in naira?\nMinimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nAvailable balance: "+fmt(user.wallet.availableKobo)+"\n\nEnter the amount, for example: 2500\nSend /cancel to stop.");
+}
+bot.action("withdraw_help",async ctx=>{await ctx.answerCbQuery();await askWithdrawalAmount(ctx);});
+bot.command("withdraw",async ctx=>askWithdrawalAmount(ctx));
+bot.command("cancel",async ctx=>{
+ const hadDraft=withdrawalDrafts.delete(String(ctx.from.id));
+ await ctx.reply(hadDraft?"Your withdrawal request has been cancelled. No money was deducted.":"There is no active withdrawal request to cancel.");
+});
+bot.action("withdraw_cancel",async ctx=>{
+ await ctx.answerCbQuery();withdrawalDrafts.delete(String(ctx.from.id));
+ await ctx.reply("Your withdrawal request has been cancelled. No money was deducted.");
+});
+bot.action("withdraw_confirm",async ctx=>{
+ await ctx.answerCbQuery();
+ const key=String(ctx.from.id),draft=withdrawalDrafts.get(key);
+ if(!draft||draft.step!=="confirm"||!draft.amountKobo||!draft.accountName||!draft.bankName||!draft.accountNumber)return ctx.reply("Your withdrawal details have expired. Please start again with /withdraw.");
+ const user=await prisma.user.findUnique({where:{telegramId:key}});
+ if(!user){withdrawalDrafts.delete(key);return ctx.reply("Please use /start first.");}
  try{
   const withdrawal=await prisma.$transaction(async tx=>{
-   const changed=await tx.wallet.updateMany({where:{userId:user.id,availableKobo:{gte:amountKobo}},data:{availableKobo:{decrement:amountKobo},pendingKobo:{increment:amountKobo}}});
+   const changed=await tx.wallet.updateMany({where:{userId:user.id,availableKobo:{gte:draft.amountKobo!}},data:{availableKobo:{decrement:draft.amountKobo!},pendingKobo:{increment:draft.amountKobo!}}});
    if(changed.count!==1)throw new Error("INSUFFICIENT_BALANCE");
-   const request=await tx.withdrawal.create({data:{userId:user.id,amountKobo,accountHolderName:parts[1],bankName:parts[2],accountNumber:parts[3]}});
-   await tx.walletTransaction.create({data:{userId:user.id,type:"WITHDRAWAL_RESERVE",amountKobo,reference:"withdrawal:"+request.id+":reserve",description:"Withdrawal request reserved - "+parts[2]}});
+   const request=await tx.withdrawal.create({data:{userId:user.id,amountKobo:draft.amountKobo!,accountHolderName:draft.accountName!,bankName:draft.bankName!,accountNumber:draft.accountNumber!}});
+   await tx.walletTransaction.create({data:{userId:user.id,type:"WITHDRAWAL_RESERVE",amountKobo:draft.amountKobo!,reference:"withdrawal:"+request.id+":reserve",description:"Withdrawal request reserved - "+draft.bankName}});
    return request;
   });
-  await ctx.reply("✅ Withdrawal request submitted.\nAmount: "+fmt(amountKobo)+"\nBank: "+parts[2]+"\nAccount: "+parts[3]+"\nStatus: PENDING\n\nYour funds have been reserved. You will be notified when the admin updates the payment status. Reference: "+withdrawal.id);
- }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available wallet balance is not enough for this withdrawal.");console.error(e);return ctx.reply("Sorry, we could not submit your request. Please try again later.");}
+  withdrawalDrafts.delete(key);
+  await ctx.reply("✅ Your withdrawal request has been submitted.\n\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\n\nYour funds have been reserved. Payment is manual and will only be marked Paid after administrator confirmation.\nReference: "+withdrawal.id);
+ }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
+});
+bot.on("text",async(ctx:any,next:any)=>{
+ const key=String(ctx.from.id),draft=withdrawalDrafts.get(key);
+ if(!draft)return next();
+ const answer=ctx.message.text.trim();
+ if(answer.startsWith("/"))return next();
+ if(draft.step==="amount"){
+  const amount=Number(answer.replace(/,/g,""));
+  if(!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(Math.round(amount*100))||Math.abs(amount*100-Math.round(amount*100))>0.001)return ctx.reply("Please enter a valid amount in naira, for example 2500.");
+  if(amount<config.MIN_WITHDRAWAL_NGN)return ctx.reply("The minimum withdrawal is "+fmt(config.MIN_WITHDRAWAL_NGN*100)+". Please enter another amount.");
+  const user=await prisma.user.findUnique({where:{telegramId:key},include:{wallet:true}});
+  const amountKobo=Math.round(amount*100);
+  if(!user?.wallet||user.wallet.availableKobo<amountKobo)return ctx.reply("Your available balance is insufficient. Available: "+fmt(user?.wallet?.availableKobo||0)+". Enter a lower amount or /cancel.");
+  draft.amountKobo=amountKobo;draft.step="name";
+  return ctx.reply("Please enter the full name of the bank account holder.");
+ }
+ if(draft.step==="name"){
+  if(answer.length<3||answer.length>100)return ctx.reply("Please enter a valid account holder name (3–100 characters).");
+  draft.accountName=answer;draft.step="bank";return ctx.reply("Which bank should receive your payment? Enter the bank name.");
+ }
+ if(draft.step==="bank"){
+  if(answer.length<2||answer.length>80)return ctx.reply("Please enter a valid bank name.");
+  draft.bankName=answer;draft.step="account";return ctx.reply("Please enter your 10-digit bank account number.");
+ }
+ if(draft.step==="account"){
+  if(!/^\\d{10}$/.test(answer))return ctx.reply("Your account number must contain exactly 10 digits. Please try again.");
+  draft.accountNumber=answer;draft.step="confirm";
+  return ctx.reply("PLEASE CONFIRM YOUR WITHDRAWAL DETAILS\n\nAmount: "+fmt(draft.amountKobo||0)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\n\nConfirm only if these details are correct.",Markup.inlineKeyboard([[Markup.button.callback("✅ Confirm withdrawal","withdraw_confirm")],[Markup.button.callback("Cancel","withdraw_cancel")]]));
+ }
+ return next();
 });
 bot.action("referral",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
@@ -108,7 +150,7 @@ bot.command("tasks",ctx=>ctx.reply("Tap My tasks from /start."));
 bot.command("wallet",async ctx=>{
  const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
- const w=u.wallet;return ctx.reply("Available: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nUse /withdraw for bank payout instructions.");
+ const w=u.wallet;return ctx.reply("Available: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nSend /withdraw to start a guided withdrawal, one question at a time.");
 });
 bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the SoccerFounder Support Group using the invite link provided in the campaign."));
 bot.catch((err)=>console.error("Bot error",err));
