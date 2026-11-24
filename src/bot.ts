@@ -137,23 +137,11 @@ bot.action("withdraw_confirm",async ctx=>{
  }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
 });
 bot.on("text",async(ctx:any,next:any)=>{
- const key=String(ctx.from.id),n=taskEvidenceDrafts.get(key);
- if(n){
-  const answer=ctx.message.text.trim();
-  if(answer.startsWith("/"))return next();
-  return ctx.reply("📸 A screenshot is required for this task. Please upload a screenshot using the photo attachment button. You may add a short caption, but text alone cannot be submitted as proof.");
-  const item=TASK_FLOW[n-1],u=await prisma.user.findUnique({where:{telegramId:key}});
-  if(!u)return ctx.reply("Please use /start first.");
-  const task=await prisma.task.findUnique({where:{type:item.type as any}});
-  if(!task)return ctx.reply("This task is not configured yet.");
-  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:answer}},update:{details:{text:answer},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
-  taskEvidenceDrafts.delete(key);
-  await ctx.reply("✅ Evidence received for Task "+n+". It is awaiting admin review. The next task unlocks only after approval.");
-  const adminIds=(config.ADMIN_IDS||"").split(",").map(x=>x.trim()).filter(Boolean);
-  for(const adminId of adminIds){try{await bot.telegram.sendMessage(Number(adminId),"📥 NEW TASK SUBMISSION\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\nEvidence: "+answer);}catch(e){console.error("Admin task notification failed for "+adminId,e);}}
-  return;
- }
- return next();
+ const key=String(ctx.from.id);
+ if(!taskEvidenceDrafts.has(key))return next();
+ const answer=ctx.message.text.trim();
+ if(answer.startsWith("/"))return next();
+ return ctx.reply("📸 A screenshot is required for this task. Please upload a screenshot using the photo attachment button. You may add a short caption, but text alone cannot be submitted as proof.");
 });
 bot.on("text",async(ctx:any,next:any)=>{
  const key=String(ctx.from.id),draft=withdrawalDrafts.get(key);
