@@ -111,7 +111,15 @@ bot.on("photo",async ctx=>{
   if(current<0)return ctx.reply("🎉 All six tasks have already been approved. Your rewards are in My wallet.");
   const currentTask=tasks.find(t=>t.type===TASK_FLOW[current].type);
   const currentSubmission=currentTask?subs.find(s=>s.taskId===currentTask.id):null;
-  if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId))return ctx.reply("⏳ Your screenshot is already under admin review. Please press Check task status for updates.");
+  if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId)){
+   const savedPhotoId=(currentSubmission.details as {photoFileId:string}).photoFileId;
+   try{
+    const savedPhotoUrl=await ctx.telegram.getFileLink(savedPhotoId);
+    const delivered=await notifyAdminPhoto(savedPhotoUrl.href,"📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
+    if(delivered)return ctx.reply("📸 YOUR SAVED SCREENSHOT WAS FORWARDED\n\n• Task: "+(current+1)+"/6 — "+currentTask!.title+"\n• Status: ⏳ Under review\n\nThe admin team has now received the screenshot. Please wait for a decision.");
+    return ctx.reply("⚠️ SCREENSHOT STILL NOT DELIVERED\n\n• Task: "+(current+1)+"/6 — "+currentTask!.title+"\n• Status: Saved, awaiting admin notification\n\nThe bot tried again but could not deliver the screenshot. Please contact support. Your evidence has not been lost.");
+   }catch(error){console.error("Retry of pending task screenshot failed:",error);return ctx.reply("⚠️ Your screenshot is saved, but the admin notification could not be delivered. Please contact support.");}
+  }
   n=current+1;
  }
  const item=TASK_FLOW[n-1];
