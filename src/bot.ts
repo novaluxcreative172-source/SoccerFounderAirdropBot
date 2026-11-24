@@ -13,7 +13,7 @@ async function userFor(ctx:any){
  return user;
 }
 const TASK_FLOW=[
- {type:"WEBSITE_REGISTRATION",title:"SoccerFounder Registration",description:"Register on "+config.WEBSITE_URL+". Submit your registered name, email and phone as evidence.",rewardKobo:10000},
+ {type:"WEBSITE_REGISTRATION",title:"Register on the SoccerFounder Website",description:"1. Visit "+config.WEBSITE_URL+". 2. Register on the website. 3. Download the SoccerFounder app from the website and complete the registration in the app. 4. Take a screenshot showing that your registration is complete, then send the screenshot here. Your evidence for this task must be a screenshot of your completed registration. Do not type your name, email or phone number in the chat.",rewardKobo:10000},
  {type:"SUPER_ONE_REGISTRATION",title:"Super One Registration",description:"Complete your Super One registration. Submit your username and Super One ID as evidence.",rewardKobo:10000},
  {type:"SPONSOR_CONFIRMATION",title:"Confirm Your Sponsor",description:"Your sponsor/team leader must be Shane. Confirm the sponsor name and submit it for verification.",rewardKobo:10000},
  {type:"COACH_BOT_COMPLETION",title:"Complete the Coach Bot Steps",description:"Open @"+config.COACH_BOT_USERNAME+" and complete all six onboarding steps. Submit confirmation or a screenshot.",rewardKobo:10000},
