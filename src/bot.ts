@@ -96,7 +96,7 @@ for(let n=1;n<=6;n++){
   if(current!==n-1)return showCurrentTask(ctx);
   const currentTask=tasks.find(x=>x.type===TASK_FLOW[n-1].type);
   const currentSubmission=currentTask?subs.find(x=>x.taskId===currentTask.id):null;
-  if(currentSubmission?.status==="PENDING")return ctx.reply("Your evidence is already awaiting admin review. Please wait for approval before continuing.");
+  if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId))return ctx.reply("Your screenshot is already awaiting admin review. Please wait for approval before continuing.");
   taskEvidenceDrafts.set(String(ctx.from.id),n);
   return ctx.reply("📸 Please upload a screenshot proving that you completed Task "+n+". Screenshots are required for review. You may add a short caption, but do not send passwords, OTPs or login details. Send /cancel to stop.");
  });
@@ -111,7 +111,7 @@ bot.on("photo",async ctx=>{
   if(current<0)return ctx.reply("🎉 All six tasks have already been approved. Your rewards are in My wallet.");
   const currentTask=tasks.find(t=>t.type===TASK_FLOW[current].type);
   const currentSubmission=currentTask?subs.find(s=>s.taskId===currentTask.id):null;
-  if(currentSubmission?.status==="PENDING")return ctx.reply("⏳ Your current task is already under admin review. Please press Check task status for updates.");
+  if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId))return ctx.reply("⏳ Your screenshot is already under admin review. Please press Check task status for updates.");
   n=current+1;
  }
  const item=TASK_FLOW[n-1];
