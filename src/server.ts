@@ -123,7 +123,7 @@ async function launchTelegramWithRateLimitRetry(start:()=>Promise<unknown>){
    const retryAfter=Number(error?.response?.parameters?.retry_after);
    if(error?.response?.error_code!==429||!Number.isFinite(retryAfter)||retryAfter<1)throw error;
    const waitMs=(retryAfter+2)*1000;
-   console.error("Telegram rate limit reached. Keeping the web service online and retrying in "+Math.ceil(waitMs/1000)+" seconds.");
+   console.error("Telegram API rate limit: method="+String(error?.on?.method||"unknown")+"; retry_after="+retryAfter+"s; description="+String(error?.response?.description||error?.message||"unknown")+". Retrying in "+Math.ceil(waitMs/1000)+" seconds.");
    await sleep(waitMs);
   }
  }
@@ -132,10 +132,13 @@ async function main(){
  await prisma.$connect();
  let startTelegram:()=>Promise<unknown>;
  if(config.WEBHOOK_DOMAIN && config.NODE_ENV==="production"){
-  const webhookPath="/telegram/"+(config.WEBHOOK_SECRET||"replace-this-secret");
+  console.log("Telegram startup mode: WEBHOOK. WEBHOOK_DOMAIN is set and NODE_ENV is production. WEBHOOK_SECRET present: "+Boolean(config.WEBHOOK_SECRET)+".");
+  if(!config.WEBHOOK_SECRET)throw new Error("WEBHOOK_SECRET is required when webhook mode is enabled.");
+  const webhookPath="/telegram/"+config.WEBHOOK_SECRET;
   app.use(bot.webhookCallback(webhookPath));
   startTelegram=()=>bot.telegram.setWebhook(config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath);
  }else{
+  console.warn("Telegram startup mode: POLLING. Webhook mode was not selected. WEBHOOK_DOMAIN present: "+Boolean(config.WEBHOOK_DOMAIN)+"; NODE_ENV: "+config.NODE_ENV+".");
   startTelegram=()=>bot.launch();
  }
  app.listen(config.PORT,()=>console.log("Server listening on "+config.PORT));
