@@ -39,7 +39,7 @@ async function showCurrentTask(ctx:any){
  const item=TASK_FLOW[next],task=tasks.find(t=>t.type===item.type);
  if(!task)return ctx.reply("This campaign task is not configured yet. Please contact support.");
  const previous=submissions.find(s=>s.taskId===task.id);
- if(previous?.status==="PENDING")return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: EVIDENCE RECEIVED — WAITING FOR ADMIN REVIEW.\\n\\nYou have already submitted this task. There is nothing else to submit right now. Once the admin approves it, the bot will unlock and send you the next task. You can check back by tapping My tasks.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","tasks")]]));
+ if(previous?.status==="PENDING")return ctx.reply("📝 TASK "+(next+1)+" OF 6\\n"+item.title+"\\nReward: "+fmt(task.rewardKobo)+"\\n\\n"+item.description+"\\n\\n⏳ STATUS: EVIDENCE RECEIVED — WAITING FOR ADMIN REVIEW.\\n\\nYou have already submitted this task. There is nothing else to submit right now. Once the admin approves it, the bot will unlock and send you the next task. You can check back by tapping My tasks.",Markup.inlineKeyboard([[Markup.button.callback("🔄 Check task status","task_status")]]));
  const note=previous?.status==="REJECTED"?"\n\nYour previous submission was rejected. "+(previous.reviewNote||"Please review the instructions and submit new evidence."):"";
  return ctx.reply("📝 TASK "+(next+1)+" OF 6\n"+item.title+"\nReward: "+fmt(task.rewardKobo)+"\n\n"+item.description+note+"\n\nComplete this task, then press DONE to submit your evidence. The next task unlocks after admin approval.",Markup.inlineKeyboard([[Markup.button.callback("✅ DONE","task_done_"+(next+1))]]));
 }
@@ -86,9 +86,19 @@ for(let n=1;n<=6;n++){
  });
 }
 bot.on("photo",async ctx=>{
- const key=String(ctx.from.id),n=taskEvidenceDrafts.get(key);
- if(!n)return ctx.reply("Open My tasks and follow the current task to submit evidence.");
- const item=TASK_FLOW[n-1],u=await prisma.user.findUnique({where:{telegramId:key}});
+ const key=String(ctx.from.id),u=await prisma.user.findUnique({where:{telegramId:key}});
+ if(!u)return ctx.reply("Please use /start first.");
+ let n=taskEvidenceDrafts.get(key);
+ if(!n){
+  const [tasks,subs]=await Promise.all([prisma.task.findMany({where:{active:true}}),prisma.taskSubmission.findMany({where:{userId:u.id}})]);
+  const current=TASK_FLOW.findIndex(item=>{const task=tasks.find(t=>t.type===item.type);const sub=task?subs.find(s=>s.taskId===task.id):null;return !task||!sub||sub.status!=="APPROVED";});
+  if(current<0)return ctx.reply("🎉 All six tasks have already been approved. Your rewards are in My wallet.");
+  const currentTask=tasks.find(t=>t.type===TASK_FLOW[current].type);
+  const currentSubmission=currentTask?subs.find(s=>s.taskId===currentTask.id):null;
+  if(currentSubmission?.status==="PENDING")return ctx.reply("⏳ Your current task is already under admin review. Please press Check task status for updates.");
+  n=current+1;
+ }
+ const item=TASK_FLOW[n-1];
  if(!u)return ctx.reply("Please use /start first.");
  const task=await prisma.task.findUnique({where:{type:item.type as any}});
  if(!task)return ctx.reply("This task is not configured yet.");
