@@ -24,12 +24,12 @@ function requireAdmin(req:Request,res:Response,next:NextFunction){
 app.get("/admin",(_req,res)=>res.sendFile(path.resolve(process.cwd(),"public/admin.html")));
 app.post("/api/admin/login",(req,res)=>{const key=String(req.body?.key||"");if(!config.ADMIN_SESSION_SECRET||!safeEqual(key,config.ADMIN_SESSION_SECRET)){res.status(401).json({error:"Invalid admin key"});return;}res.json({ok:true,token:config.ADMIN_SESSION_SECRET});});
 app.get("/api/admin/submissions",requireAdmin,async(req,res)=>{
- const status=String(req.query.status||"PENDING");
- if(!["PENDING","APPROVED","REJECTED"].includes(status))return res.status(400).json({error:"Invalid status"});
+ const status=String(req.query.status||"ALL");
+ if(!["ALL","PENDING","APPROVED","REJECTED"].includes(status))return res.status(400).json({error:"Invalid status"});
  const rows=await prisma.taskSubmission.findMany({
-  where:{status:status as any},
+  where:status==="ALL"?{}:{status:status as any},
   include:{task:true,user:{select:{id:true,telegramId:true,username:true,firstName:true,lastName:true}}},
-  orderBy:{createdAt:"asc"},take:300
+  orderBy:{createdAt:"desc"},take:1000
  });
  res.json(rows);
 });
