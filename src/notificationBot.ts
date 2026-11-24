@@ -107,7 +107,7 @@ export function registerAdminWithdrawalHandler(handler: AdminWithdrawalHandler):
       await ctx.editMessageText(oldText + "\n\n✅ PAYMENT CONFIRMED\n" + result, { reply_markup: { inline_keyboard: [] } });
     } catch (error: any) {
       const message = String(error?.message || "");
-      await ctx.answerCbQuery(message.includes("already paid") ? "This withdrawal is already marked paid." : "Payment confirmation failed. Check the admin dashboard.", { show_alert: true });
+      await ctx.answerCbQuery(message.toLowerCase().includes("cancelled") || message.toLowerCase().includes("no longer payable") ? "This request was cancelled/returned. Do not pay it." : message.includes("already paid") ? "This withdrawal is already marked paid." : "Payment confirmation failed. Check the admin dashboard.", { show_alert: true });
     }
   });
 }
