@@ -38,7 +38,7 @@ bot.action("tasks",async ctx=>{
 });
 bot.on("photo",async ctx=>{
  const caption=ctx.message.caption||"";
- const match=caption.match(/^\\/submit(?:@\\w+)?\\s+(\\d+)\\s*(.*)$/i);
+ const match=caption.match(/^\/submit(?:@\w+)?\s+(\d+)\s*(.*)$/i);
  if(!match)return ctx.reply("To submit a screenshot, add a caption in this format: /submit 5 I have joined the support group.");
  const n=Number(match[1]);
  const types=["WEBSITE_REGISTRATION","SUPER_ONE_REGISTRATION","SPONSOR_CONFIRMATION","COACH_BOT_COMPLETION","SUPPORT_GROUP_JOIN","FOOTBALL_ENGAGEMENT"];
