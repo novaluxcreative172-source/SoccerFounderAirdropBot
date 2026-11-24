@@ -2,7 +2,7 @@ import {Telegraf,Markup} from "telegraf";
 import {randomBytes} from "node:crypto";
 import {prisma} from "./db";
 import {config} from "./config";
-import {notifyAdminReview,notifyAdminText,registerAdminReviewHandler} from "./notificationBot";
+import {notifyAdminReview,notifyAdminWithdrawal,registerAdminReviewHandler,registerAdminWithdrawalHandler} from "./notificationBot";
 import {reviewSubmission} from "./services/review";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
 const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -218,7 +218,7 @@ bot.action("withdraw_confirm",async ctx=>{
   });
   withdrawalDrafts.delete(key);
   await ctx.reply("✅ WITHDRAWAL REQUEST SUBMITTED\n\n• Amount: "+fmt(draft.amountKobo)+"\n• Account name: "+draft.accountName+"\n• Bank: "+draft.bankName+"\n• Account number: "+draft.accountNumber+"\n• Status: ⏳ Pending review\n\nYour funds have been reserved. You will be notified when payment is confirmed.\n🔖 Reference: "+withdrawal.id);
-  await notifyAdminText("💸 NEW WITHDRAWAL REQUEST\nParticipant: "+(user.firstName||"")+" "+(user.lastName||"")+" (@"+(user.username||"no username")+")\nTelegram ID: "+user.telegramId+"\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\nWithdrawal ID: "+withdrawal.id+"\n\nReview in the admin dashboard. After manually transferring the funds, click Confirm Paid to notify the participant.");
+  await notifyAdminWithdrawal("💸 NEW WITHDRAWAL REQUEST\nParticipant: "+(user.firstName||"")+" "+(user.lastName||"")+" (@"+(user.username||"no username")+")\nTelegram ID: "+user.telegramId+"\nAmount: "+fmt(draft.amountKobo)+"\nAccount name: "+draft.accountName+"\nBank: "+draft.bankName+"\nAccount number: "+draft.accountNumber+"\nStatus: PENDING REVIEW\nWithdrawal ID: "+withdrawal.id+"\n\nAfter you manually transfer the money, press the Confirm Paid button below. The participant will receive a payment confirmation in the Airdrop Bot.",withdrawal.id);
  }catch(e:any){if(e.message==="INSUFFICIENT_BALANCE")return ctx.reply("Your available balance is no longer sufficient. No withdrawal was created.");console.error("Withdrawal submission failed",e);return ctx.reply("Sorry, we could not submit your withdrawal. Please try again later.");}
 });
 bot.on("text",async(ctx:any,next:any)=>{
@@ -296,6 +296,24 @@ bot.command("wallet",async ctx=>{
  const w=u.wallet;return ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nSend /withdraw to request a payout.");
 });
 bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the SoccerFounder Support Group using the invite link provided in the campaign."));
+registerAdminWithdrawalHandler(async (withdrawalId, adminId) => {
+ const result=await prisma.$transaction(async tx=>{
+  const withdrawal=await tx.withdrawal.findUnique({where:{id:withdrawalId},include:{user:true}});
+  if(!withdrawal)throw new Error("Withdrawal not found");
+  if(withdrawal.status==="PAID")throw new Error("already paid");
+  if(withdrawal.status==="REJECTED")throw new Error("Withdrawal was rejected");
+  const changed=await tx.withdrawal.updateMany({where:{id:withdrawalId,status:{in:["PENDING","APPROVED"]}},data:{status:"PAID",adminNote:"Payment manually confirmed from admin notification bot"}});
+  if(!changed.count)throw new Error("Withdrawal status changed; refresh the admin dashboard");
+  await tx.wallet.update({where:{userId:withdrawal.userId},data:{pendingKobo:{decrement:withdrawal.amountKobo},withdrawnKobo:{increment:withdrawal.amountKobo}}});
+  await tx.adminActionLog.create({data:{adminId,action:"WITHDRAWAL_MARKED_PAID",targetId:withdrawalId,metadata:{source:"admin_notification_bot"}}});
+  return withdrawal;
+ });
+ const amount=fmt(result.amountKobo);
+ try {
+  await bot.telegram.sendMessage(Number(result.user.telegramId),"✅ PAYMENT SUCCESSFUL — SOCCERFOUNDER\n\nYour withdrawal has been marked as PAID.\n\n• Amount: "+amount+"\n• Bank: "+result.bankName+"\n• Account name: "+result.accountHolderName+"\n• Status: PAID\n\nThank you for participating in SoccerFounder.");
+ } catch(error) { console.error("Participant withdrawal paid notification failed:",error); }
+ return "Withdrawal "+withdrawalId+" marked PAID. Participant "+result.user.telegramId+" has been notified.";
+});
 registerAdminReviewHandler(async (submissionId, approved, adminId) => {
  const existing=await prisma.taskSubmission.findUnique({where:{id:submissionId},include:{user:true,task:true}});
  if(!existing)throw new Error("Submission not found");
