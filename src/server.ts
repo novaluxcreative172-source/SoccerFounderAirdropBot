@@ -136,8 +136,17 @@ async function main(){
   console.log("Telegram startup mode: WEBHOOK. WEBHOOK_DOMAIN is set and NODE_ENV is production. WEBHOOK_SECRET present: "+Boolean(config.WEBHOOK_SECRET)+".");
   if(!config.WEBHOOK_SECRET)throw new Error("WEBHOOK_SECRET is required when webhook mode is enabled.");
   const webhookPath="/telegram/"+config.WEBHOOK_SECRET;
-  app.use(bot.webhookCallback(webhookPath));
-  startTelegram=()=>bot.telegram.setWebhook(config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath);
+  app.use(bot.webhookCallback(webhookPath,{secretToken:config.WEBHOOK_SECRET}));
+  const expectedWebhookUrl=config.WEBHOOK_DOMAIN!.replace(/\/$/,"")+webhookPath;
+  startTelegram=async()=>{
+   const current=await bot.telegram.getWebhookInfo();
+   if(current.url===expectedWebhookUrl){
+    console.log("Telegram webhook is already registered correctly; skipping setWebhook.");
+    return;
+   }
+   console.log("Telegram webhook URL differs from the configured URL; registering the expected webhook.");
+   await bot.telegram.setWebhook(expectedWebhookUrl,{secret_token:config.WEBHOOK_SECRET});
+  };
  }else{
   console.warn("Telegram startup mode: POLLING. Webhook mode was not selected. WEBHOOK_DOMAIN present: "+Boolean(config.WEBHOOK_DOMAIN)+"; NODE_ENV: "+config.NODE_ENV+".");
   startTelegram=()=>bot.launch();
