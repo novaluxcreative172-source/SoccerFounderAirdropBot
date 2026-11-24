@@ -1,4 +1,4 @@
-import { Input, Markup, Telegraf } from "telegraf";
+import { Markup, Telegraf } from "telegraf";
 import { config } from "./config";
 
 const adminIds = config.ADMIN_IDS.split(",").map(value => value.trim()).filter(Boolean);
