@@ -149,8 +149,9 @@ async function main(){
   startTelegram=()=>bot.launch();
  }
  app.listen(config.PORT,()=>console.log("Server listening on "+config.PORT));
- if(adminNotificationBot){
-  void launchTelegramWithRateLimitRetry(()=>adminNotificationBot.launch()).then(()=>console.log("Admin notification bot connected successfully.")).catch(error=>console.error("Admin notification bot startup failed:",error));
+ const notificationBot=adminNotificationBot;
+ if(notificationBot){
+  void launchTelegramWithRateLimitRetry(()=>notificationBot.launch()).then(()=>console.log("Admin notification bot connected successfully.")).catch(error=>console.error("Admin notification bot startup failed:",error));
  }else{
   console.warn("ADMIN_NOTIFICATION_BOT_TOKEN is not configured. Admin alerts will be unavailable until it is added in Render.");
  }
