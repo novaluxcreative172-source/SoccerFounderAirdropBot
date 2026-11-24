@@ -2,7 +2,7 @@ import {Telegraf,Markup} from "telegraf";
 import {randomBytes} from "node:crypto";
 import {prisma} from "./db";
 import {config} from "./config";
-import {notifyAdminReview,notifyAdminWithdrawal,registerAdminReviewHandler,registerAdminWithdrawalHandler} from "./notificationBot";
+import {notifyAdminReview,notifyAdminWithdrawal,notifyAdminText,registerAdminReviewHandler,registerAdminWithdrawalHandler} from "./notificationBot";
 import {reviewSubmission} from "./services/review";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
 const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -210,8 +210,7 @@ bot.action(/^withdraw_user_cancel_([A-Za-z0-9_-]+)$/,async ctx=>{
    return request;
   });
   await ctx.editMessageText("↩️ WITHDRAWAL CANCELLED — FUNDS RETURNED\n\n• Amount returned: "+fmt(result.amountKobo)+"\n• Status: CANCELLED / RETURNED\n\nThe full amount is back in your available wallet balance. You can start a new withdrawal request whenever you are ready.");
-  try{await adminNotificationBotPlaceholder();}
-  catch(_){}
+  await notifyAdminText("↩️ WITHDRAWAL CANCELLED BY PARTICIPANT\n\nWithdrawal ID: "+withdrawalId+"\nTelegram ID: "+telegramId+"\nAmount returned: "+fmt(result.amountKobo)+"\nStatus: CANCELLED / RETURNED\n\nDo not make this payment. The participant has received the funds back in their available wallet.");
  }catch(error:any){
   const msg=String(error?.message||"");
   const response=msg==="ALREADY_PAID"?"This withdrawal has already been paid and cannot be reversed here.":msg==="ALREADY_RETURNED"?"This withdrawal has already been cancelled or returned.":msg==="WITHDRAWAL_NOT_FOUND"?"This withdrawal request was not found in your account.":"This request can no longer be cancelled. Please refresh your wallet or contact support.";
