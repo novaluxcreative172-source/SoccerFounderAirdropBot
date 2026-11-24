@@ -64,20 +64,52 @@ export async function notifyAdminPhoto(photoUrl: string, caption: string, submis
     console.error("[SCREENSHOT] FAILED: ADMIN_NOTIFICATION_BOT_TOKEN is not configured.");
     return false;
   }
-  const validAdminIds = adminIds.filter(id => /^\d+$/.test(id));
+  const validAdminIds = adminIds.filter(id => /^\\d+$/.test(id));
   if (validAdminIds.length === 0) {
     console.error("[SCREENSHOT] FAILED: no valid numeric ADMIN_IDS configured. Entries:", adminIds.length);
+    return false;
+  }
+
+  // Download the image with the MAIN bot's file URL, then upload the bytes
+  // through the notification bot. Telegram file_id values and file URLs are
+  // bot-specific, so the notification bot must not be asked to fetch that URL.
+  let imageBuffer: Buffer;
+  let filename = "task-evidence.jpg";
+  try {
+    console.log("[SCREENSHOT] Downloading image through main bot file URL. Submission:", submissionId);
+    const response = await fetch(photoUrl);
+    if (!response.ok) {
+      throw new Error("Main bot file download returned HTTP " + response.status);
+    }
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      throw new Error("Downloaded file is not an image. Content-Type: " + contentType);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    imageBuffer = Buffer.from(arrayBuffer);
+    if (imageBuffer.length === 0) throw new Error("Downloaded screenshot is empty.");
+    if (imageBuffer.length > 20 * 1024 * 1024) {
+      throw new Error("Screenshot exceeds Telegram's 20 MB bot upload limit.");
+    }
+    const extension = contentType.toLowerCase().includes("png") ? "png"
+      : contentType.toLowerCase().includes("webp") ? "webp"
+      : contentType.toLowerCase().includes("gif") ? "gif" : "jpg";
+    filename = "task-evidence." + extension;
+    console.log("[SCREENSHOT] Image downloaded successfully. Submission:", submissionId,
+      "Bytes:", imageBuffer.length, "Content-Type:", contentType);
+  } catch (error: any) {
+    console.error("[SCREENSHOT] MAIN BOT IMAGE DOWNLOAD FAILED. Submission:", submissionId,
+      "Error:", error?.message || String(error));
     return false;
   }
 
   let delivered = 0;
   for (const adminId of validAdminIds) {
     try {
-      console.log("[SCREENSHOT] Sending Telegram-hosted image URL to admin", adminId, "submission", submissionId);
-      // Telegram fetches the main bot's file URL directly; file_id values are bot-specific.
+      console.log("[SCREENSHOT] Uploading image bytes to admin", adminId, "submission", submissionId);
       await adminNotificationBot.telegram.sendPhoto(
         Number(adminId),
-        photoUrl,
+        { source: imageBuffer, filename },
         {
           caption,
           ...Markup.inlineKeyboard([
@@ -87,7 +119,7 @@ export async function notifyAdminPhoto(photoUrl: string, caption: string, submis
         }
       );
       delivered++;
-      console.log("[SCREENSHOT] SUCCESS: delivered to admin", adminId, "submission", submissionId);
+      console.log("[SCREENSHOT] SUCCESS: uploaded image to admin", adminId, "submission", submissionId);
     } catch (error: any) {
       console.error("[SCREENSHOT] SEND FAILED: admin", adminId, "submission", submissionId,
         "Telegram error:", error?.response?.description || error?.description || error?.message || String(error));
