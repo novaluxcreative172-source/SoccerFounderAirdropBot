@@ -169,7 +169,7 @@ bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaig
 bot.action("wallet",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
- const w=u.wallet; await ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Total withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nTap Request withdrawal or send /withdraw to begin.");
+ const w=u.wallet; const pendingRequest=await prisma.withdrawal.findFirst({where:{userId:u.id,status:{in:["PENDING","APPROVED"]}},orderBy:{createdAt:"desc"}}); const walletButtons=[] as any[]; if(pendingRequest)walletButtons.push([Markup.button.callback("↩️ Cancel pending withdrawal & return funds","withdraw_user_cancel_"+pendingRequest.id)]); walletButtons.push([Markup.button.callback("🏦 Request withdrawal","withdraw_help")]); await ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Total withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nPending funds are reserved only. You can cancel an unpaid request and return the full amount to your available balance.",Markup.inlineKeyboard(walletButtons));
 });
 type WithdrawalDraft = { step: "amount" | "name" | "bank" | "account" | "confirm"; amountKobo?: number; accountName?: string; bankName?: string; accountNumber?: string };
 const withdrawalDrafts = new Map<string, WithdrawalDraft>();
@@ -318,7 +318,7 @@ bot.command("tasks",ctx=>ctx.reply("Tap My tasks from /start."));
 bot.command("wallet",async ctx=>{
  const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
  if(!u)return ctx.reply("Please use /start first.");
- const w=u.wallet;return ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nSend /withdraw to request a payout.");
+ const w=u.wallet;const pendingRequest=await prisma.withdrawal.findFirst({where:{userId:u.id,status:{in:["PENDING","APPROVED"]}},orderBy:{createdAt:"desc"}});const walletButtons=[] as any[];if(pendingRequest)walletButtons.push([Markup.button.callback("↩️ Cancel pending withdrawal & return funds","withdraw_user_cancel_"+pendingRequest.id)]);walletButtons.push([Markup.button.callback("🏦 Request withdrawal","withdraw_help")]);return ctx.reply("👛 YOUR WALLET\n\n• Available: "+fmt(w?.availableKobo||0)+"\n• Pending withdrawal: "+fmt(w?.pendingKobo||0)+"\n• Total earned: "+fmt(w?.totalEarnedKobo||0)+"\n• Withdrawn: "+fmt(w?.withdrawnKobo||0)+"\n• Minimum withdrawal: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\n\nPending funds are reserved only. Cancel an unpaid request to return the full amount.",Markup.inlineKeyboard(walletButtons));
 });
 bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the SoccerFounder Support Group using the invite link provided in the campaign."));
 registerAdminWithdrawalHandler(async (withdrawalId, adminId) => {
