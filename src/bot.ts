@@ -209,7 +209,7 @@ bot.action(/^withdraw_user_cancel_([A-Za-z0-9_-]+)$/,async ctx=>{
    await tx.walletTransaction.create({data:{userId:user.id,type:"WITHDRAWAL_REFUND",amountKobo:request.amountKobo,reference:"withdrawal:"+withdrawalId+":participant-cancel-refund",description:"Withdrawal cancelled by participant; reserved funds returned to available balance"}});
    return request;
   });
-  await ctx.editMessageText("↩️ WITHDRAWAL CANCELLED — FUNDS RETURNED\n\n• Amount returned: "+fmt(result.amountKobo)+"\n• Status: CANCELLED / RETURNED\n\nThe full amount is back in your available wallet balance. You can start a new withdrawal request whenever you are ready.");
+  await ctx.editMessageText("↩️ WITHDRAWAL CANCELLED — FUNDS RETURNED\n\n• Amount returned: "+fmt(result.amountKobo)+"\n• Status: CANCELLED / RETURNED\n\nThe full amount is back in your available wallet balance. You can start a new withdrawal request whenever you are ready.",Markup.inlineKeyboard([[Markup.button.callback("🏦 Request a new withdrawal","withdraw_help")],[Markup.button.callback("💰 My wallet","wallet")]]));
   await notifyAdminText("↩️ WITHDRAWAL CANCELLED BY PARTICIPANT\n\nWithdrawal ID: "+withdrawalId+"\nTelegram ID: "+telegramId+"\nAmount returned: "+fmt(result.amountKobo)+"\nStatus: CANCELLED / RETURNED\n\nDo not make this payment. The participant has received the funds back in their available wallet.");
  }catch(error:any){
   const msg=String(error?.message||"");
