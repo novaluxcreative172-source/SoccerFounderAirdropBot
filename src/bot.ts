@@ -139,7 +139,7 @@ bot.on("photo",async ctx=>{
   if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId)){
    console.log("[SCREENSHOT] Pending evidence found; retrying notification. Submission:",currentSubmission.id,"Task:",current+1);
    try{
-    const delivered=await notifyAdminReview("📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
+    const delivered=await notifyAdminReview("📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n📎 Proof file: RECEIVED (image stored)\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
     if(delivered)return ctx.reply("✅ Your submission has been received and is awaiting review. Please wait for the decision.");
     // The participant was already informed when the original submission was saved.
     // Do not send another failure message on every photo/retry attempt.
@@ -157,7 +157,7 @@ bot.on("photo",async ctx=>{
  const photo=ctx.message.photo[ctx.message.photo.length-1],caption=ctx.message.caption||"";
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
- const delivered=await notifyAdminReview("📩 NEW TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+n+"/6 — "+task.title+"\n💰 Reward: "+fmt(task.rewardKobo)+"\n🔖 Submission: "+submission.id+"\n\n"+(caption?"Caption: "+caption:"No caption."),submission.id);
+ const delivered=await notifyAdminReview("📩 NEW TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+n+"/6 — "+task.title+"\n📎 Proof file: RECEIVED (image stored)\n💰 Reward: "+fmt(task.rewardKobo)+"\n🔖 Submission: "+submission.id+"\n\n"+(caption?"Caption: "+caption:"No caption."),submission.id);
  if(delivered){
   await ctx.reply("📸 SUBMISSION RECEIVED\n\n• Task: "+n+"/6 — "+task.title+"\n• Reward: "+fmt(task.rewardKobo)+"\n• Status: ⏳ Under review\n\nYour submission has been received and is awaiting review. Please wait for approval.");
  }else{
