@@ -1,4 +1,4 @@
-import { Telegraf } from "telegraf";
+import { Input, Markup, Telegraf } from "telegraf";
 import { config } from "./config";
 
 const adminIds = config.ADMIN_IDS.split(",").map(value => value.trim()).filter(Boolean);
@@ -31,14 +31,52 @@ export async function notifyAdminText(message: string): Promise<void> {
   }
 }
 
-export async function notifyAdminPhoto(photoFileId: string, caption: string): Promise<void> {
+
+type AdminReviewHandler = (submissionId: string, approved: boolean, adminId: string) => Promise<string>;
+export function registerAdminReviewHandler(handler: AdminReviewHandler): void {
+  if (!adminNotificationBot) return;
+  adminNotificationBot.action(/^review_(approve|reject)_([A-Za-z0-9_-]+)$/, async ctx => {
+    const adminId = String(ctx.from.id);
+    if (!adminIds.includes(adminId)) {
+      await ctx.answerCbQuery("Not authorized.", { show_alert: true });
+      return;
+    }
+    const approved = ctx.match[1] === "approve";
+    const submissionId = ctx.match[2];
+    try {
+      const result = await handler(submissionId, approved, adminId);
+      await ctx.answerCbQuery(approved ? "Task approved." : "Task rejected.");
+      const oldCaption = ctx.callbackQuery.message && "caption" in ctx.callbackQuery.message ? ctx.callbackQuery.message.caption || "" : "";
+      await ctx.editMessageCaption(oldCaption + "\\n\\n" + (approved ? "✅ APPROVED" : "❌ REJECTED") + "\\n" + result, { reply_markup: { inline_keyboard: [] } });
+    } catch (error: any) {
+      const message = String(error?.message || "");
+      await ctx.answerCbQuery(message.includes("already reviewed") ? "This submission was already reviewed." : "Review failed. Check the admin dashboard.", { show_alert: true });
+    }
+  });
+}
+
+export async function notifyAdminPhoto(photoUrl: string, caption: string, submissionId: string): Promise<void> {
   if (!adminNotificationBot) {
     console.warn("Admin notification bot token is not configured; admin screenshot was not forwarded.");
     return;
   }
   for (const adminId of adminIds) {
     try {
-      await adminNotificationBot.telegram.sendPhoto(Number(adminId), photoFileId, { caption });
+      
+      const response = await fetch(photoUrl);
+      if (!response.ok) throw new Error("Could not download evidence image from Telegram.");
+      const bytes = Buffer.from(await response.arrayBuffer());
+      await adminNotificationBot.telegram.sendPhoto(
+        Number(adminId),
+        Input.fromBuffer(bytes, "task-evidence.jpg"),
+        {
+          caption,
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("✅ Approve task", "review_approve_" + submissionId)],
+            [Markup.button.callback("❌ Reject task", "review_reject_" + submissionId)]
+          ])
+        }
+      );
     } catch (error) {
       console.error("Could not send admin screenshot to", adminId, error);
     }
