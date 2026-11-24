@@ -145,6 +145,8 @@ async function main(){
    console.log("[WEBHOOK] Main bot update received. Update ID:",String(update.update_id??"unknown"),"Type:",command);
    next();
   });
+  // Telegraf checks req.url against the full webhook path. Mount at the
+  // Express root so Express does not strip the path before Telegraf sees it.
   app.use(bot.webhookCallback(webhookPath));
 
   // Give the separate admin notification bot its own webhook endpoint too.
