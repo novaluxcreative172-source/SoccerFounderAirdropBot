@@ -121,9 +121,13 @@ bot.on("photo",async ctx=>{
  const photo=ctx.message.photo[ctx.message.photo.length-1],caption=ctx.message.caption||"";
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
- await ctx.reply("✅ Screenshot received for Task "+n+". It is now awaiting admin review. Task "+(n+1)+" will unlock only after approval.");
  const photoUrl=await ctx.telegram.getFileLink(photo.file_id);
- await notifyAdminPhoto(photoUrl.href,"📥 NEW TASK EVIDENCE\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\nTelegram ID: "+u.telegramId+"\nTask "+n+": "+task.title+"\nReward on approval: "+fmt(task.rewardKobo)+"\nSubmission ID: "+submission.id+"\n"+(caption?"Details: "+caption:"No caption provided."),submission.id);
+ const delivered=await notifyAdminPhoto(photoUrl.href,"📥 NEW TASK EVIDENCE\\nParticipant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\\nTelegram ID: "+u.telegramId+"\\nTask "+n+": "+task.title+"\\nReward on approval: "+fmt(task.rewardKobo)+"\\nSubmission ID: "+submission.id+"\\n"+(caption?"Details: "+caption:"No caption provided."),submission.id);
+ if(delivered){
+  await ctx.reply("✅ Your screenshot for Task "+n+" has been saved and successfully forwarded to the admin team.\\n\\n⏳ Status: UNDER REVIEW.\\nPlease wait for the admin decision. The next task unlocks only after approval.");
+ }else{
+  await ctx.reply("⚠️ Your screenshot for Task "+n+" has been saved in your account, but the admin notification could not be delivered. It is NOT confirmed as under review yet. Please contact campaign support; do not submit the same screenshot again.");
+ }
 
 });
 bot.command("submit",ctx=>ctx.reply("Please use My tasks to complete the campaign one task at a time. Open the current task, press DONE, then send your evidence when prompted."));
