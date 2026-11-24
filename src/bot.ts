@@ -102,6 +102,7 @@ for(let n=1;n<=6;n++){
  });
 }
 bot.on("photo",async ctx=>{
+ console.log("[SCREENSHOT] Incoming photo update received. Telegram user:",ctx.from.id,"Photo sizes:",ctx.message.photo.length);
  const key=String(ctx.from.id),u=await prisma.user.findUnique({where:{telegramId:key}});
  if(!u)return ctx.reply("Please use /start first.");
  let n=taskEvidenceDrafts.get(key);
@@ -113,6 +114,7 @@ bot.on("photo",async ctx=>{
   const currentSubmission=currentTask?subs.find(s=>s.taskId===currentTask.id):null;
   if(currentSubmission?.status==="PENDING"&&Boolean((currentSubmission.details as {photoFileId?:string}|null)?.photoFileId)){
    const savedPhotoId=(currentSubmission.details as {photoFileId:string}).photoFileId;
+   console.log("[SCREENSHOT] Pending evidence found; retrying notification. Submission:",currentSubmission.id,"Task:",current+1);
    try{
     const savedPhotoUrl=await ctx.telegram.getFileLink(savedPhotoId);
     const delivered=await notifyAdminPhoto(savedPhotoUrl.href,"📩 RETRY — TASK SUBMISSION\n\n👤 Participant: "+(u.firstName||"")+" "+(u.lastName||"")+" (@"+(u.username||"no username")+")\n🆔 Telegram ID: "+u.telegramId+"\n📝 Task: "+(current+1)+"/6 — "+currentTask!.title+"\n💰 Reward: "+fmt(currentTask!.rewardKobo)+"\n🔖 Submission: "+currentSubmission.id+"\n\nThis is a retry of the saved screenshot.",currentSubmission.id);
@@ -126,6 +128,7 @@ bot.on("photo",async ctx=>{
  if(!u)return ctx.reply("Please use /start first.");
  const task=await prisma.task.findUnique({where:{type:item.type as any}});
  if(!task)return ctx.reply("This task is not configured yet.");
+ console.log("[SCREENSHOT] Saving new task evidence. Task:",n,"User:",u.telegramId);
  const photo=ctx.message.photo[ctx.message.photo.length-1],caption=ctx.message.caption||"";
  const submission=await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:caption,photoFileId:photo.file_id}},update:{details:{text:caption,photoFileId:photo.file_id},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
  taskEvidenceDrafts.delete(key);
