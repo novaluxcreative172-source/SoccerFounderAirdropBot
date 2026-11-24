@@ -3,7 +3,7 @@ import {randomBytes} from "node:crypto";
 import {prisma} from "./db";
 import {config} from "./config";
 export const bot=new Telegraf(process.env.BOT_TOKEN!);
-const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:2});
+const fmt=(k:number)=>"₦"+(k/100).toLocaleString("en-NG",{minimumFractionDigits:0,maximumFractionDigits:2});
 async function userFor(ctx:any){
  const f=ctx.from; const found=await prisma.user.findUnique({where:{telegramId:String(f.id)}});
  if(found)return found;
@@ -14,7 +14,7 @@ async function userFor(ctx:any){
 }
 bot.start(async ctx=>{
  await userFor(ctx);
- await ctx.reply("⚽ Welcome to SoccerFounder Airdrop & Rewards!\n\nComplete the six campaign steps and submit evidence for admin review. Sponsor/team leader must be Shane. Rewards are subject to verification; no income is guaranteed.",Markup.inlineKeyboard([
+ await ctx.reply("⚽ Welcome to SoccerFounder Airdrop & Rewards!\n\nComplete all six campaign tasks and submit evidence for admin review. Earn up to ₦800 in task rewards. Earn an additional ₦100 referral reward for each referred participant who completes and gets approval for all six tasks. Sponsor/team leader must be Shane. Rewards are subject to verification; no income is guaranteed.",Markup.inlineKeyboard([
  [Markup.button.callback("📝 My tasks","tasks"),Markup.button.callback("💰 My wallet","wallet")],
  [Markup.button.callback("👥 Invite friends","referral")],
  [Markup.button.callback("🏦 Request withdrawal","withdraw_help")],
@@ -25,17 +25,27 @@ bot.start(async ctx=>{
 bot.action("tasks",async ctx=>{
  await ctx.answerCbQuery();
  const rows=await prisma.task.findMany({where:{active:true},orderBy:{createdAt:"asc"}});
- const labels=["Register on SoccerFounder and submit your name, email and phone.","Register on Super One and submit username and Super One ID.","Confirm your sponsor is Shane.","Complete the six steps in the SoccerFounder Coach Bot.","Join the configured support group.","Participate meaningfully for 30 days in the support group."];
- await ctx.reply("YOUR SIX CAMPAIGN STEPS\n\n"+labels.map((x,i)=>(i+1)+". "+x).join("\n\n")+"\n\nSubmit details using /submit TASK_NUMBER your details. Admin review is required. "+(rows.length?"Tasks are configured.":"Tasks are currently being prepared."));
+ const descriptions=[
+  "Register on SoccerFounder and submit your name, email and phone.",
+  "Register on Super One and submit your username and Super One ID.",
+  "Confirm that your sponsor/team leader is Shane.",
+  "Complete all six steps in the SoccerFounder Coach Bot.",
+  "Join the SoccerFounder Support Group and submit a screenshot for manual review.",
+  "Complete 30 days of genuine football engagement and submit evidence for manual review."
+ ];
+ const body=rows.map((task,i)=>(i+1)+". "+task.title+" — "+fmt(task.rewardKobo)+"\n"+(descriptions[i]||task.description));
+ await ctx.reply("YOUR SIX CAMPAIGN TASKS\n\n"+body.join("\n\n")+"\n\nTOTAL TASK REWARDS: ₦800\n\nSubmit evidence with /submit TASK_NUMBER your details. Every task is subject to admin approval. Your ₦100 referral reward is paid only after the person you referred has all six tasks approved.");
 });
 bot.command("submit",async ctx=>{
  const bits=ctx.message.text.split(" "); const n=Number(bits[1]);
  const types=["WEBSITE_REGISTRATION","SUPER_ONE_REGISTRATION","SPONSOR_CONFIRMATION","COACH_BOT_COMPLETION","SUPPORT_GROUP_JOIN","FOOTBALL_ENGAGEMENT"];
- if(!Number.isInteger(n)||n<1||n>6)return ctx.reply("Usage: /submit 1 your details. Use /tasks for the checklist.");
+ if(!Number.isInteger(n)||n<1||n>6)return ctx.reply("Usage: /submit 1 your details. Use /tasks for the checklist and rewards.");
  const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}}); if(!u)return ctx.reply("Please use /start first.");
  const task=await prisma.task.findUnique({where:{type:types[n-1] as any}}); if(!task)return ctx.reply("Campaign tasks are not yet configured.");
- await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:bits.slice(2).join(" ")}},update:{details:{text:bits.slice(2).join(" ")},status:"PENDING"}});
- await ctx.reply("Submission received. It is pending administrator verification.");
+ const details=bits.slice(2).join(" ");
+ if(!details.trim())return ctx.reply("Please include your evidence or details after the task number. For example: /submit 5 I have joined the support group; screenshot attached separately.");
+ await prisma.taskSubmission.upsert({where:{userId_taskId:{userId:u.id,taskId:task.id}},create:{userId:u.id,taskId:task.id,details:{text:details}},update:{details:{text:details},status:"PENDING",reviewNote:null,reviewedAt:null,rewardCredited:false}});
+ await ctx.reply("Submission received for "+task.title+". It is pending administrator verification. Reward if approved: "+fmt(task.rewardKobo)+".");
 });
 bot.action("wallet",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)},include:{wallet:true}});
@@ -71,7 +81,7 @@ bot.command("withdraw",async ctx=>{
 bot.action("referral",async ctx=>{
  await ctx.answerCbQuery(); const u=await prisma.user.findUnique({where:{telegramId:String(ctx.from.id)}});
  if(!u)return ctx.reply("Please use /start first.");
- await ctx.reply("Your personal referral link:\nhttps://t.me/"+config.BOT_USERNAME+"?start="+u.referralCode+"\n\nOne-level referrals only. Rewards are subject to campaign verification.");
+ await ctx.reply("Your personal referral link:\nhttps://t.me/"+config.BOT_USERNAME+"?start="+u.referralCode+"\n\nEarn ₦100 for each person you refer after they complete and receive approval for all six campaign tasks. One-level referrals only. Self-referrals and duplicate referrals do not qualify.");
 });
 bot.command("tasks",ctx=>ctx.reply("Tap My tasks from /start."));
 bot.command("wallet",async ctx=>{
@@ -79,5 +89,5 @@ bot.command("wallet",async ctx=>{
  if(!u)return ctx.reply("Please use /start first.");
  const w=u.wallet;return ctx.reply("Available: "+fmt(w?.availableKobo||0)+"\nPending: "+fmt(w?.pendingKobo||0)+"\nTotal earned: "+fmt(w?.totalEarnedKobo||0)+"\nWithdrawn: "+fmt(w?.withdrawnKobo||0)+"\nMinimum: "+fmt(config.MIN_WITHDRAWAL_NGN*100)+"\nUse /withdraw for bank payout instructions.");
 });
-bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the configured campaign support group for help."));
+bot.command("help",ctx=>ctx.reply("Commands: /start, /tasks, /submit 1 details, /wallet, /withdraw. Contact the SoccerFounder Support Group using the invite link provided in the campaign."));
 bot.catch((err)=>console.error("Bot error",err));
